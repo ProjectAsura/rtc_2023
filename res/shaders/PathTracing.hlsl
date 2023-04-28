@@ -29,11 +29,13 @@
 //-----------------------------------------------------------------------------
 ConstantBuffer<SceneParameters> SceneParam : register(b0);
 RayTracingAS                    SceneAS    : register(t0);
-ByteAddressBuffer               Instances  : register(t1);
-ByteAddressBuffer               Transforms : register(t2);
-Texture2D                       BackGround : register(t3);
-RWTexture2D<float4>             Canvas     : register(u0);
+//ByteAddressBuffer               Instances  : register(t1);
+//ByteAddressBuffer               Transforms : register(t2);
+//Texture2D                       BackGround : register(t3);
+RWTexture2D<float4>             Radiance   : register(u0);
 
+ByteAddressBuffer   Vertices : register(t1);
+ByteAddressBuffer   Indices  : register(t2);
 
 //-----------------------------------------------------------------------------
 // Forward Declarations.
@@ -54,6 +56,7 @@ struct SurfaceHit
     float3  GeometryNormal; // ジオメトリ法線.
 };
 
+#if 0
 //-----------------------------------------------------------------------------
 //      IBLをサンプルします.
 //-----------------------------------------------------------------------------
@@ -121,12 +124,21 @@ SurfaceHit GetSurfaceHit(uint instanceId, uint triangleIndex, float2 barycentric
 
     return surfaceHit;
 }
+#endif
 
 //-----------------------------------------------------------------------------
 //      スクリーン上へのレイを求めます.
 //-----------------------------------------------------------------------------
-RayDesc GeneratePinholeCameraRay(float2 pixel)
+RayDesc GeneratePinholeCameraRay(float2 offset)
 {
+    float2 pixel = float2(DispatchRaysIndex().xy);
+    const float2 resolution = float2(DispatchRaysDimensions().xy);
+    //pixel += lerp(-0.5f.xx, 0.5f.xx, offset);
+
+    float2 uv = (pixel + 0.5f) / resolution;
+    uv.y = 1.0f - uv.y;
+    pixel = uv * 2.0f - 1.0f;
+
     RayDesc ray;
     ray.Origin      = GetPosition(SceneParam.View);
     ray.Direction   = CalcRayDir(pixel, SceneParam.View, SceneParam.Proj);
@@ -135,6 +147,26 @@ RayDesc GeneratePinholeCameraRay(float2 pixel)
 
     return ray;
 }
+
+//-----------------------------------------------------------------------------
+//      レイを求めます.
+//-----------------------------------------------------------------------------
+void CalcRay(float2 index, out float3 pos, out float3 dir)
+{
+    float4 orig   = float4(0.0f, 0.0f, 0.0f, 1.0f);           // カメラの位置.
+    float4 screen = float4(-2.0f * index + 1.0f, 0.0f, 1.0f); // スクリーンの位置.
+
+    orig   = mul(SceneParam.InvView,     orig);
+    screen = mul(SceneParam.InvViewProj, screen);
+
+    // w = 1 に射影.
+    screen.xyz /= screen.w;
+
+    // レイの位置と方向を設定.
+    pos = orig.xyz;
+    dir = normalize(screen.xyz - orig.xyz);
+}
+
 
 //-----------------------------------------------------------------------------
 //      シャドウレイをキャストします.
@@ -172,33 +204,38 @@ void OnGenerateRay()
     // 乱数初期化.
     uint4 seed = SetSeed(DispatchRaysIndex().xy, SceneParam.FrameIndex);
 
-    float2 pixel = float2(DispatchRaysIndex().xy);
-    const float2 resolution = float2(DispatchRaysDimensions().xy);
-
     // アンチエイリアシング.
     float2 offset = float2(Random(seed), Random(seed));
-    pixel += lerp(-0.5f.xx, 0.5f.xx, offset);
+    //pixel += lerp(-0.5f.xx, 0.5f.xx, offset);
 
     // レイを設定.
-    RayDesc ray = GeneratePinholeCameraRay(pixel);
+    RayDesc ray = GeneratePinholeCameraRay(offset);
+
+    //float2 index = float2(DispatchRaysIndex().xy) / float2(DispatchRaysDimensions().xy);
+    //float3 rayPos, rayDir;
+    //CalcRay(index, rayPos, rayDir);
+
+    //RayDesc ray;
+    //ray.Origin = rayPos;
+    //ray.Direction = rayDir;
+    //ray.TMin = 1e-3f;
+    //ray.TMax = 10000.0f;
 
     // パストレ.
-    #if RTC_TARGET == RTC_DEBUG
+    //#if RTC_TARGET == RTC_DEBUG
     float3 radiance = DebugTracing(ray);
-    #else
-    float3 radiance = PathTracing(ray);
-    #endif
+    //#else
+    //float3 radiance = PathTracing(ray);
+    //#endif
 
     uint2 launchId = DispatchRaysIndex().xy;
 
-    #if RTC_TARGET == RTC_RELEASE
     // アキュムレーション.
-    float3 prevRadiance = Canvas[launchId].rgb;
+    float3 prevRadiance = Radiance[launchId].rgb;
     radiance = (SceneParam.EnableAccumulation) ? (prevRadiance + radiance) : radiance;
-    #endif
 
     // 描画結果を格納.
-    Canvas[launchId] = float4(radiance, 1.0f);
+    Radiance[launchId] = float4(radiance, 1.0f);
 }
 
 //-----------------------------------------------------------------------------
@@ -218,7 +255,8 @@ void OnClosestHit(inout Payload payload, in HitArgs args)
 [shader("miss")]
 void OnMiss(inout Payload payload)
 {
-    payload.InstanceId = INVALID_ID;
+    payload.InstanceId  = INVALID_ID;
+    payload.PrimitiveId = INVALID_ID;
 }
 
 //-----------------------------------------------------------------------------
@@ -261,7 +299,9 @@ float3 DebugTracing(RayDesc ray)
 {
     Payload payload = (Payload)0;
 
-    float3 color = 0.0f.xxx;
+    TraceRay(SceneAS, RAY_FLAG_NONE, ~0, STANDARD_RAY_INDEX, 0, STANDARD_RAY_INDEX, ray, payload);
+
+    float3 color = payload.HasHit() ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 0.0f, 0.0f);
 
     return SaturateFloat(color);
 }

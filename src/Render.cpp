@@ -10,10 +10,18 @@
 #include <Macro.h>
 #include <App.h>
 
-#if ASDX_ENABLE_IMGUI
-#include <imgui.h>
-#endif//ASDX_ENABLE_IMGUI
 
+//-----------------------------------------------------------------------------
+//      UABバリアを発行します.
+//-----------------------------------------------------------------------------
+void UAVBarrier(ID3D12GraphicsCommandList6* pCmd, ID3D12Resource* pResource)
+{
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type            = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    barrier.Flags           = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.UAV.pResource   = pResource;
+    pCmd->ResourceBarrier(1, &barrier);
+}
 
 //-----------------------------------------------------------------------------
 //      描画処理です.
@@ -24,8 +32,19 @@ void App::Render(ID3D12GraphicsCommandList6* pCmd)
     {
     }
 
-    // Path-Tracing.
+    // レイトレーシング.
     {
+        pCmd->SetComputeRootSignature(m_RayTracingRootSig.GetPtr());
+        pCmd->SetComputeRootConstantBufferView(0, m_SceneParam.GetResource()->GetGPUVirtualAddress());
+        pCmd->SetComputeRootShaderResourceView(1, m_TLAS.GetResource()->GetGPUVirtualAddress());
+        pCmd->SetComputeRootShaderResourceView(2, m_VB->GetGPUVirtualAddress());
+        pCmd->SetComputeRootShaderResourceView(3, m_IB->GetGPUVirtualAddress());
+//        pCmd->SetComputeRootDescriptorTable(4, );
+        pCmd->SetComputeRootDescriptorTable(5, m_Radiance.GetUAV()->GetHandleGPU());
+
+        DispatchRay(pCmd);
+
+        UAVBarrier(pCmd, m_Radiance.GetResource());
     }
 
     // デノイズ.
@@ -40,29 +59,3 @@ void App::Render(ID3D12GraphicsCommandList6* pCmd)
     {
     }
 }
-
-
-#if RTC_TARGET == RTC_DEVELOP
-//-----------------------------------------------------------------------------
-//      デバッグ用2D描画を行います.
-//-----------------------------------------------------------------------------
-void App::Draw2D(ID3D12GraphicsCommandList6* pCmd)
-{
-    #if ASDX_ENABLE_IMGUI
-    asdx::GuiMgr::Instance().Update(m_Width, m_Height);
-    {
-        ImGui::SetNextWindowPos(ImVec2(20, 20));
-        ImGui::SetNextWindowSize(ImVec2(120, 0));
-        if (ImGui::Begin(u8"フレーム情報", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar))
-        {
-            ImGui::Text(u8"FPS   : %.3lf", GetFPS());
-            ImGui::Text(u8"Frame : %ld", GetFrameCount());
-            ImGui::Text(u8"Accum : %ld", m_AccumulatedFrames);
-        }
-        ImGui::End();
-
-    }
-    asdx::GuiMgr::Instance().Draw(pCmd);
-    #endif//ASDX_ENABLE_IMGUI
-}
-#endif//RTC_TARGET == RTC_DEVELOP

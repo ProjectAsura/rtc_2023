@@ -36,6 +36,10 @@ static const uint32_t   MAX_ITERATION       = 16;
 #include "../res/shaders/Compiled/PathTracing.inc"
 #include "../res/shaders/Compiled/ModelVS.inc"
 #include "../res/shaders/Compiled/ModelPS.inc"
+#if RTC_TARGET == RTC_DEVELOP
+#include "../asdx12/res/shaders/Compiled/FullScreenVS.inc"
+#include "../res/shaders/Compiled/DebugPS.inc"
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -70,11 +74,9 @@ struct SceneParams
 ///////////////////////////////////////////////////////////////////////////////
 struct Payload
 {
-    asdx::Vector3   Position;
-    asdx::Vector3   Normal;
-    asdx::Vector3   Tangent;
-    asdx::Vector2   TexCoord;
-    uint32_t        MaterialId;
+    uint32_t        InstanceId;
+    uint32_t        PrimitiveId;
+    asdx::Vector2   Barycentrics;
 };
 
 //-----------------------------------------------------------------------------
@@ -138,7 +140,7 @@ void InitRangeAsUAV(D3D12_DESCRIPTOR_RANGE& range, UINT registerIndex, UINT coun
     range.OffsetInDescriptorsFromTableStart = 0;
 }
 
-void InitAsConstans(D3D12_ROOT_PARAMETER& param, UINT registerIndex, UINT count, D3D12_SHADER_VISIBILITY visiblity)
+void InitAsConstants(D3D12_ROOT_PARAMETER& param, UINT registerIndex, UINT count, D3D12_SHADER_VISIBILITY visiblity)
 {
     param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
     param.Constants.Num32BitValues  = count;
@@ -150,6 +152,14 @@ void InitAsConstans(D3D12_ROOT_PARAMETER& param, UINT registerIndex, UINT count,
 void InitAsCBV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VISIBILITY visiblity)
 {
     param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    param.Descriptor.ShaderRegister = registerIndex;
+    param.Descriptor.RegisterSpace  = 0;
+    param.ShaderVisibility          = visiblity;
+}
+
+void InitAsSRV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VISIBILITY visiblity)
+{
+    param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_SRV;
     param.Descriptor.ShaderRegister = registerIndex;
     param.Descriptor.RegisterSpace  = 0;
     param.ShaderVisibility          = visiblity;
@@ -181,7 +191,7 @@ bool InitRootSignature
         pDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, blob.GetAddress(), errorBlob.GetAddress());
     if (FAILED(hr))
     {
-        ELOG("Error : D3D12SerializeRootSignature() Failed. errcode = 0x%x, msg = %s",
+        ELOGA("Error : D3D12SerializeRootSignature() Failed. errcode = 0x%x, msg = %s",
             hr, reinterpret_cast<const char*>(errorBlob->GetBufferPointer()));
         return false;
     }
@@ -316,6 +326,23 @@ void App::RayTracingPipeline::Term()
     PipelineState.Term();
 }
 
+//-----------------------------------------------------------------------------
+//      レイトレーシングパイプラインを起動します.
+//-----------------------------------------------------------------------------
+void App::RayTracingPipeline::DispatchRays(ID3D12GraphicsCommandList6* pCmd, uint32_t w, uint32_t h)
+{
+    D3D12_DISPATCH_RAYS_DESC desc = {};
+    desc.HitGroupTable              = HitGroup.GetTableView();
+    desc.MissShaderTable            = Miss.GetTableView();
+    desc.RayGenerationShaderRecord  = RayGen.GetRecordView();
+    desc.Width                      = w;
+    desc.Height                     = h;
+    desc.Depth                      = 1;
+
+    pCmd->SetPipelineState1(PipelineState.GetStateObject());
+    pCmd->DispatchRays(&desc);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // App class
 ///////////////////////////////////////////////////////////////////////////////
@@ -335,7 +362,9 @@ App::App(const RenderDesc& desc)
     m_DeviceDesc.EnableBreakOnWarning   = false;
     m_DeviceDesc.EnableDRED             = true;
     m_DeviceDesc.EnableCapture          = true;
-    m_DeviceDesc.EnableDebug            = false;
+    m_DeviceDesc.EnableDebug            = true;
+
+    m_SwapChainFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 #else
     // 提出版.
     m_CreateWindow = false;
@@ -498,37 +527,114 @@ bool App::OnInit()
         }
     }
 
-    // レイトレーシングパス.
+    // G-Bufferパス初期化.
+    if (!InitGBufferPass())
     {
-        D3D12_SHADER_VISIBILITY cs = D3D12_SHADER_VISIBILITY_ALL;
-
-        D3D12_DESCRIPTOR_RANGE ranges[5] = {};
-        InitRangeAsSRV(ranges[0], 0);
-        InitRangeAsSRV(ranges[1], 1);
-        InitRangeAsSRV(ranges[2], 2);
-        InitRangeAsSRV(ranges[3], 3);
-        InitRangeAsUAV(ranges[4], 0);
-
-        D3D12_ROOT_PARAMETER params[6] = {};
-        InitAsCBV  (params[0], 0, cs);
-        InitAsTable(params[1], 1, &ranges[0], cs);
-        InitAsTable(params[2], 1, &ranges[1], cs);
-        InitAsTable(params[3], 1, &ranges[2], cs);
-        InitAsTable(params[4], 1, &ranges[3], cs);
-        InitAsTable(params[5], 1, &ranges[4], cs);
-
-        D3D12_ROOT_SIGNATURE_DESC desc = {};
-        desc.NumParameters       = _countof(params);
-        desc.pParameters         = params;
-        desc.NumStaticSamplers   = asdx::GetStaticSamplerCounts();
-        desc.pStaticSamplers     = asdx::GetStaticSamplers();
-
-        if (!InitRootSignature(pDevice, &desc, m_RayTracingRootSig.GetAddress()))
-        {
-            ELOG("Error : RayTracing RootSignature Init Failed.");
-            return false;
-        }
+        ELOG("Error : G-Buffer Pass Init Failed.");
+        return false;
     }
+
+    // レイトレーシングパス初期化.
+    if (!InitRayTracingPass())
+    {
+        ELOG("Error : RayTracing Pass Init Failed.");
+        return false;
+    }
+
+    // トーンマップパス初期化.
+    if (!InitTonemapPass())
+    {
+        ELOG("Error : Tonemap Pass Init Failed.");
+        return false;
+    }
+
+    // TemporalAAパス初期化.
+    if (!InitTemporalAntiAliasPass())
+    {
+        ELOG("Error : TemporalAA Pass Init Failed.");
+        return false;
+    }
+
+    #if RTC_TARGET == RTC_DEVELOP
+    if (!InitForTest(pCmd))
+    {
+        ELOG("Error : InitForTest() Failed.");
+        return false;
+    }
+
+    if (!InitDebugPass())
+    {
+        ELOG("Error : DebugPass Init Failed.");
+        return false;
+    }
+
+    // カメラ初期化.
+    {
+        //auto pos    = asdx::Vector3(0.0f, 0.0f, 300.5f);
+        auto pos    = asdx::Vector3(0.0f, 0.0f, -2.0f);
+        auto target = asdx::Vector3(0.0f, 0.0f, 0.0f);
+        auto upward = asdx::Vector3(0.0f, 1.0f, 0.0f);
+        m_AppCamera.Init(pos, target, upward, 1.0f, 1000.0f);
+
+        auto fovY   = asdx::ToRadian(37.5f);
+        auto aspect = float(m_RenderDesc.Width) / float(m_RenderDesc.Height);
+
+        auto view = m_AppCamera.GetView();
+        auto proj = asdx::Matrix::CreatePerspectiveFieldOfView(
+            fovY,
+            aspect,
+            m_AppCamera.GetNearClip(),
+            m_AppCamera.GetFarClip());
+
+        auto invView = asdx::Matrix::Invert(view);
+        auto invProj = asdx::Matrix::Invert(proj);
+
+        m_CurrView    = view;
+        m_CurrProj    = proj;
+        m_CurrInvView = invView;
+        m_CurrInvProj = invProj;
+
+        m_PrevView    = view;
+        m_PrevProj    = proj;
+        m_PrevInvView = invView;
+        m_PrevInvProj = invProj;
+    }
+    #endif
+
+    // セットアップコマンド実行.
+    {
+        pCmd->Close();
+
+        ID3D12CommandList* pCmds[] = {
+            pCmd
+        };
+
+        auto pQueue = asdx::GetGraphicsQueue();
+
+        // コマンドを実行.
+        pQueue->Execute(_countof(pCmds), pCmds);
+
+        // 待機点を発行.
+        m_WaitPoint = pQueue->Signal();
+
+        // 完了を待機.
+        pQueue->Sync(m_WaitPoint);
+    }
+
+    timer.End();
+    printf_s("Initialize End. %lf[msec]\n", timer.GetElapsedMsec());
+
+    // 標準出力をフラッシュ.
+    std::fflush(stdout);
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+//      G-Bufferパスの初期化を行います.
+//-----------------------------------------------------------------------------
+bool App::InitGBufferPass()
+{
+    auto pDevice = asdx::GetD3D12Device();
 
     // G-Buffer ルートシグニチャ.
     {
@@ -566,49 +672,34 @@ bool App::OnInit()
         }
     }
 
-    // G-Bufferパイプライン.
-    {
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
-        desc.pRootSignature                     = m_GBufferRootSig.GetPtr();
-        desc.VS                                 = { ModelVS, sizeof(ModelVS) };
-        desc.PS                                 = { ModelPS, sizeof(ModelPS) };
-        desc.BlendState                         = asdx::BLEND_DESC(asdx::BLEND_STATE_OPAQUE);
-        desc.DepthStencilState                  = asdx::DEPTH_STENCIL_DESC(asdx::DEPTH_STATE_DEFAULT);
-        desc.RasterizerState                    = asdx::RASTERIZER_DESC(asdx::RASTERIZER_STATE_CULL_NONE);
-        desc.SampleMask                         = D3D12_DEFAULT_SAMPLE_MASK;
-        desc.PrimitiveTopologyType              = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        desc.NumRenderTargets                   = 4;
-        desc.RTVFormats[0]                      = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-        desc.RTVFormats[1]                      = DXGI_FORMAT_R16G16_FLOAT;
-        desc.RTVFormats[2]                      = DXGI_FORMAT_R8_UNORM;
-        desc.RTVFormats[3]                      = DXGI_FORMAT_R16G16_FLOAT;
-        desc.DSVFormat                          = DXGI_FORMAT_D32_FLOAT;
-        desc.InputLayout.NumElements            = 0;
-        desc.InputLayout.pInputElementDescs     = nullptr;
-        desc.SampleDesc.Count                   = 1;
-        desc.SampleDesc.Quality                 = 0;
+    //// G-Bufferパイプライン.
+    //{
+    //    D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+    //    desc.pRootSignature                     = m_GBufferRootSig.GetPtr();
+    //    desc.VS                                 = { ModelVS, sizeof(ModelVS) };
+    //    desc.PS                                 = { ModelPS, sizeof(ModelPS) };
+    //    desc.BlendState                         = asdx::BLEND_DESC(asdx::BLEND_STATE_OPAQUE);
+    //    desc.DepthStencilState                  = asdx::DEPTH_STENCIL_DESC(asdx::DEPTH_STATE_DEFAULT);
+    //    desc.RasterizerState                    = asdx::RASTERIZER_DESC(asdx::RASTERIZER_STATE_CULL_NONE);
+    //    desc.SampleMask                         = D3D12_DEFAULT_SAMPLE_MASK;
+    //    desc.PrimitiveTopologyType              = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    //    desc.NumRenderTargets                   = 4;
+    //    desc.RTVFormats[0]                      = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    //    desc.RTVFormats[1]                      = DXGI_FORMAT_R16G16_FLOAT;
+    //    desc.RTVFormats[2]                      = DXGI_FORMAT_R8_UNORM;
+    //    desc.RTVFormats[3]                      = DXGI_FORMAT_R16G16_FLOAT;
+    //    desc.DSVFormat                          = DXGI_FORMAT_D32_FLOAT;
+    //    desc.InputLayout.NumElements            = 0;
+    //    desc.InputLayout.pInputElementDescs     = nullptr;
+    //    desc.SampleDesc.Count                   = 1;
+    //    desc.SampleDesc.Quality                 = 0;
 
-        if (!m_GBufferPipelineState.Init(pDevice, &desc))
-        {
-            ELOG("Error : G-Buffer Pipeline Init Failed.");
-            return false;
-        }
-    }
-
-    // トーンマップルートシグニチャ.
-    {
-    }
-
-    // トーンマップパイプライン.
-    {
-        D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
-
-        if (!m_TonemapPipelineState.Init(pDevice, &desc))
-        {
-            ELOG("Error : Tonemap Pipeline Init Failed.");
-            return false;
-        }
-    }
+    //    if (!m_GBufferPipelineState.Init(pDevice, &desc))
+    //    {
+    //        ELOG("Error : G-Buffer Pipeline Init Failed.");
+    //        return false;
+    //    }
+    //}
 
     // アルベド用ターゲット.
     {
@@ -712,6 +803,56 @@ bool App::OnInit()
         m_Depth.SetName(L"DepthBuffer");
     }
 
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+//      レイトレーシングパスの初期化を行います.
+//-----------------------------------------------------------------------------
+bool App::InitRayTracingPass()
+{
+    auto pDevice = asdx::GetD3D12Device();
+
+    // レイトレーシングパス.
+    {
+        D3D12_SHADER_VISIBILITY cs = D3D12_SHADER_VISIBILITY_ALL;
+
+        D3D12_DESCRIPTOR_RANGE srvRange[1] = {};
+        InitRangeAsSRV(srvRange[0], 5);
+
+        D3D12_DESCRIPTOR_RANGE uavRange[1] = {};
+        InitRangeAsUAV(uavRange[0], 0);
+
+        D3D12_ROOT_PARAMETER params[6] = {};
+        InitAsCBV  (params[0], 0, cs);
+        InitAsSRV  (params[1], 0, cs);
+        InitAsSRV  (params[2], 1, cs);
+        InitAsSRV  (params[3], 2, cs);
+        InitAsTable(params[4], 1, &srvRange[0], cs);
+        InitAsTable(params[5], 1, &uavRange[0], cs);
+
+        D3D12_ROOT_SIGNATURE_DESC desc = {};
+        desc.NumParameters       = _countof(params);
+        desc.pParameters         = params;
+        desc.NumStaticSamplers   = asdx::GetStaticSamplerCounts();
+        desc.pStaticSamplers     = asdx::GetStaticSamplers();
+
+        if (!InitRootSignature(pDevice, &desc, m_RayTracingRootSig.GetAddress()))
+        {
+            ELOG("Error : RayTracing RootSignature Init Failed.");
+            return false;
+        }
+    }
+
+    // パイプラインステート.
+    {
+        if (!m_RayTracingPipeline.Init(m_RayTracingRootSig.GetPtr(), PathTracing, sizeof(PathTracing)))
+        {
+            ELOG("Error : PathTracing Pipeline Init Failed.");
+            return false;
+        }
+    }
+
     // レイトレ用ターゲット.
     {
         asdx::TargetDesc desc;
@@ -725,14 +866,39 @@ bool App::OnInit()
         desc.SampleDesc.Quality = 0;
         desc.InitState          = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-        if (!m_Canvas.Init(&desc))
+        if (!m_Radiance.Init(&desc))
         {
-            ELOG("Error : Canvas Init Failed.");
+            ELOG("Error : Radiance Init Failed.");
             return false;
         }
 
-        m_Canvas.SetName(L"Canvas");
+        m_Radiance.SetName(L"Radiance");
     }
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+//      トーンマップパスの初期化を行います.
+//-----------------------------------------------------------------------------
+bool App::InitTonemapPass()
+{
+    auto pDevice = asdx::GetD3D12Device();
+
+    // トーンマップルートシグニチャ.
+    {
+    }
+
+    //// トーンマップパイプライン.
+    //{
+    //    D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
+
+    //    if (!m_TonemapPipelineState.Init(pDevice, &desc))
+    //    {
+    //        ELOG("Error : Tonemap Pipeline Init Failed.");
+    //        return false;
+    //    }
+    //}
 
     // トーンマップ用ターゲット.
     {
@@ -754,6 +920,22 @@ bool App::OnInit()
         }
 
         m_Tonemaped.SetName(L"TonemapBuffer");
+    }
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+//      テンポラルAAパスの初期化を行います.
+//-----------------------------------------------------------------------------
+bool App::InitTemporalAntiAliasPass()
+{
+    // ルートシグニチャ.
+    {
+    }
+
+    // パイプラインステート.
+    {
     }
 
     // カラーヒストリーバッファ
@@ -785,81 +967,6 @@ bool App::OnInit()
         m_ColorHistory[1].SetName(L"ColorHistory1");
     }
 
-    #if RTC_TARGET == RTC_DEVELOP
-    // ファイル監視設定.
-    {
-        auto dirPath = asdx::ToFullPathA("../res/shaders");
-
-        asdx::FileWatcher::Desc desc = {};
-        desc.DirectoryPath = dirPath.c_str();
-        desc.BufferSize    = 4096;
-        desc.WaitTimeMsec  = 16;
-        desc.pListener     = this;
-
-        if (!m_Watcher.Init(desc))
-        {
-            ELOG("Error : File Watcher Initialize Failed.");
-            return false;
-        }
-    }
-
-    // カメラ初期化.
-    {
-        auto pos    = asdx::Vector3(0.0f, 0.0f, 300.5f);
-        auto target = asdx::Vector3(0.0f, 0.0f, 0.0f);
-        auto upward = asdx::Vector3(0.0f, 1.0f, 0.0f);
-        m_AppCamera.Init(pos, target, upward, 0.1f, 10000.0f);
-
-        auto fovY   = asdx::ToRadian(37.5f);
-        auto aspect = float(m_RenderDesc.Width) / float(m_RenderDesc.Height);
-
-        auto view = m_AppCamera.GetView();
-        auto proj = asdx::Matrix::CreatePerspectiveFieldOfView(
-            fovY,
-            aspect,
-            m_AppCamera.GetNearClip(),
-            m_AppCamera.GetFarClip());
-
-        auto invView = asdx::Matrix::Invert(view);
-        auto invProj = asdx::Matrix::Invert(proj);
-
-        m_CurrView    = view;
-        m_CurrProj    = proj;
-        m_CurrInvView = invView;
-        m_CurrInvProj = invProj;
-
-        m_PrevView    = view;
-        m_PrevProj    = proj;
-        m_PrevInvView = invView;
-        m_PrevInvProj = invProj;
-    }
-    #endif
-
-    // セットアップコマンド実行.
-    {
-        pCmd->Close();
-
-        ID3D12CommandList* pCmds[] = {
-            pCmd
-        };
-
-        auto pQueue = asdx::GetGraphicsQueue();
-
-        // コマンドを実行.
-        pQueue->Execute(_countof(pCmds), pCmds);
-
-        // 待機点を発行.
-        m_WaitPoint = pQueue->Signal();
-
-        // 完了を待機.
-        pQueue->Sync(m_WaitPoint);
-    }
-
-    timer.End();
-    printf_s("Initialize End. %lf[msec]\n", timer.GetElapsedMsec());
-
-    // 標準出力をフラッシュ.
-    std::fflush(stdout);
     return true;
 }
 
@@ -877,7 +984,7 @@ void App::OnTerm()
 
     m_SceneParam.Term();
 
-    m_Canvas    .Term();
+    m_Radiance  .Term();
     m_Albedo    .Term();
     m_Normal    .Term();
     m_Velocity  .Term();
@@ -897,12 +1004,22 @@ void App::OnTerm()
     m_GBufferPipelineState.Term();
     m_TonemapPipelineState.Term();
     m_DenoisePipelineState.Term();
-    m_TemporalAAPipelineState.Term();
+    m_TemporalAntiAliasPipelineState.Term();
 
     m_RayTracingRootSig.Reset();
+    m_RayTracingPipeline.Term();
+    RTC_DEBUG_CODE(m_DevRayTracingPipeline.Term());
+    RTC_DEBUG_CODE(m_DebugRootSignature.Reset());
+    RTC_DEBUG_CODE(m_DebugPipelineState.Term());
 
-    m_PathTracePipeline.Term();
-    RTC_DEBUG_CODE(m_DebugTracePipeline.Term());
+#if 1
+    m_VB.Reset();
+    m_IB.Reset();
+    m_VertexSRV.Reset();
+    m_IndexSRV.Reset();
+    m_BLAS.Term();
+    m_TLAS.Term();
+#endif
 
     timer.End();
     printf_s("Terminate Process : %lf[msec]\n", timer.GetElapsedMsec());
@@ -957,6 +1074,13 @@ void App::OnFrameMove(asdx::FrameEventArgs& args)
         auto changed = false;
         changed |= (memcmp(&m_CurrView, &m_PrevView, sizeof(asdx::Matrix)) != 0);
         changed |= (memcmp(&m_CurrProj, &m_PrevProj, sizeof(asdx::Matrix)) != 0);
+    #if RTC_TARGET == RTC_DEVELOP
+        if (m_DirtyShader)
+        {
+            changed       = true;
+            m_DirtyShader = false;
+        }
+    #endif
 
         // カメラ変更があった場合はアキュームレーションを無効化.
         if (changed)
@@ -1026,6 +1150,8 @@ void App::OnFrameRender(asdx::FrameEventArgs& args)
         pCmd->RSSetViewports(1, &m_Viewport);
         pCmd->RSSetScissorRects(1, &m_ScissorRect);
 
+
+
         Draw2D(pCmd);
 
         m_ColorTarget[idx].Transition(pCmd, D3D12_RESOURCE_STATE_PRESENT);
@@ -1085,6 +1211,21 @@ void App::OnKey(const asdx::KeyEventArgs& args)
     #if RTC_TARGET == RTC_DEVELOP
     {
         m_AppCamera.OnKey(args.KeyCode, args.IsKeyDown, args.IsAltDown);
+
+        if (args.IsKeyDown)
+        {
+            switch(args.KeyCode)
+            {
+            // シェーダリロード.
+            case VK_F7:
+                {
+                    m_RayTracingReloadFlags.Set(REQUEST_BIT_INDEX, true);
+                    m_GBufferReloadFlags   .Set(REQUEST_BIT_INDEX, true);
+                    m_TonemapReloadFlags   .Set(REQUEST_BIT_INDEX, true);
+                }
+                break;
+            }
+        }
     }
     #endif
 }
@@ -1212,16 +1353,21 @@ void App::CaptureResource(ID3D12Resource* pResource)
 }
 
 //-----------------------------------------------------------------------------
-//      レイトレーシングパイプラインを取得します.
+//      レイトレーシングパイプラインを起動します.
 //-----------------------------------------------------------------------------
-App::RayTracingPipeline* App::GetRayTracingPipline()
+void App::DispatchRay(ID3D12GraphicsCommandList6* pCmd)
 {
 #if RTC_TARGET == RTC_DEVELOP
     if (m_RayTracingReloadFlags.Get(RELOADED_BIT_INDEX))
-    { return &m_DebugTracePipeline; }
+    {
+        m_DevRayTracingPipeline.DispatchRays(
+            pCmd, m_RenderDesc.Width, m_RenderDesc.Height);
+        return;
+    }
 #endif
 
-    return &m_PathTracePipeline;
+    m_RayTracingPipeline.DispatchRays(
+        pCmd, m_RenderDesc.Width, m_RenderDesc.Height);
 }
 
 #if RTC_TARGET == RTC_DEVELOP
@@ -1245,43 +1391,6 @@ void CheckModify
     // 対象ファイルを検出したらリロードフラグを立てる.
     if (detect)
     { flags.Set(REQUEST_BIT_INDEX, true); }
-}
-
-//-----------------------------------------------------------------------------
-//      ファイル更新時の処理.
-//-----------------------------------------------------------------------------
-void App::OnUpdate
-(
-    asdx::ACTION_TYPE   type,
-    const char*         directoryPath,
-    const char*         relativePath
-)
-{
-    if (type != asdx::ACTION_MODIFIED)
-    { return; }
-
-    // RayTracingシェーダ.
-    {
-        // "../res/shaders" ディレクトリからの相対パス.
-        const char* shader_paths[] = {
-            "Common.hlsli"
-            "PathTracing.hlsl"
-        };
-
-        CheckModify(
-            relativePath,
-            m_RayTracingReloadFlags,
-            shader_paths,
-            _countof(shader_paths));
-    }
-
-    // Tonemapシェーダ.
-    {
-        //const char* shader_paths[] = {
-        //    "Tonemap.hlsl"
-        //};
-        //CheckModify(relativePath, m_TonemapReloadFlags, shader_paths, _countof(shader_paths));
-    }
 }
 
 //-----------------------------------------------------------------------------
@@ -1321,22 +1430,26 @@ bool CompileShader
 //-----------------------------------------------------------------------------
 void App::ReloadShader()
 {
+    auto successCount = 0;
+
     if (m_RayTracingReloadFlags.Get(REQUEST_BIT_INDEX))
     {
         asdx::RefPtr<asdx::IBlob> shader;
 
-        if (CompileShader(L"../res/shaders/RayTracing.hlsl", "", "lib_6_6", shader.GetAddress()))
+        // シェーダコンパイル.
+        if (CompileShader(L"../res/shaders/PathTracing.hlsl", "", "lib_6_6", shader.GetAddress()))
         { 
             // 解放.
-            m_DebugTracePipeline.Term();
+            m_DevRayTracingPipeline.Term();
 
-            // リロードしたシェーダから製紙画.
-            if (m_DebugTracePipeline.Init(
+            // リロードしたシェーダから生成.
+            if (m_DevRayTracingPipeline.Init(
                 m_RayTracingRootSig.GetPtr(),
                 shader->GetBufferPointer(),
                 shader->GetBufferSize()))
             {
                 m_RayTracingReloadFlags.Set(RELOADED_BIT_INDEX, true);
+                successCount++;
             }
         }
 
@@ -1357,6 +1470,202 @@ void App::ReloadShader()
 
         m_TonemapReloadFlags.Set(REQUEST_BIT_INDEX, false);
     }
+
+    if (successCount > 0)
+    {
+        // リロード完了時刻を取得.
+        tm local_time = {};
+        auto t   = time(nullptr);
+        auto err = localtime_s( &local_time, &t );
+
+        // 成功ログを出力.
+        ILOGA("Info : Shader Reload Successs!! [%04d/%02d/%02d %02d:%02d:%02d], successCount = %u",
+            local_time.tm_year + 1900,
+            local_time.tm_mon + 1,
+            local_time.tm_mday,
+            local_time.tm_hour,
+            local_time.tm_min,
+            local_time.tm_sec,
+            successCount);
+
+        m_DirtyShader = true;
+    }
+}
+
+bool App::InitDebugPass()
+{
+    auto pDevice = asdx::GetD3D12Device();
+
+    // ルートシグニチャ.
+    {
+        auto ps = D3D12_SHADER_VISIBILITY_PIXEL;
+
+        D3D12_DESCRIPTOR_RANGE srvRange[1] = {};
+        InitRangeAsSRV(srvRange[0], 0);
+
+        D3D12_ROOT_PARAMETER params[2] = {};
+        InitAsConstants(params[0], 0, 1, ps);
+        InitAsTable(params[1], 1, &srvRange[0], ps);
+
+        auto flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+        D3D12_ROOT_SIGNATURE_DESC desc = {};
+        desc.pParameters        = params;
+        desc.NumParameters      = _countof(params);
+        desc.pStaticSamplers    = asdx::GetStaticSamplers();
+        desc.NumStaticSamplers  = asdx::GetStaticSamplerCounts();
+        desc.Flags              = flags;
+
+        if (!InitRootSignature(pDevice, &desc, m_DebugRootSignature.GetAddress()))
+        {
+            ELOG("Error : DebugRootSignature Init Failed.");
+            return false;
+        }
+    }
+
+    // パイプラインステート.
+    {
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+        desc.pRootSignature         = m_DebugRootSignature.GetPtr();
+        desc.VS                     = { FullScreenVS, sizeof(FullScreenVS) };
+        desc.PS                     = { DebugPS, sizeof(DebugPS) };
+        desc.BlendState             = asdx::BLEND_DESC(asdx::BLEND_STATE_OPAQUE);
+        desc.DepthStencilState      = asdx::DEPTH_STENCIL_DESC(asdx::DEPTH_STATE_DEFAULT);
+        desc.RasterizerState        = asdx::RASTERIZER_DESC(asdx::RASTERIZER_STATE_CULL_NONE);
+        desc.SampleMask             = D3D12_DEFAULT_SAMPLE_MASK;
+        desc.PrimitiveTopologyType  = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        desc.NumRenderTargets       = 1;
+        desc.RTVFormats[0]          = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.DSVFormat              = DXGI_FORMAT_UNKNOWN;
+        desc.InputLayout            = asdx::GetQuadLayout();
+        desc.SampleDesc.Count       = 1;
+        desc.SampleDesc.Quality     = 0;
+
+        if (!m_DebugPipelineState.Init(pDevice, &desc))
+        {
+            ELOG("Error : DebugPipelineState Init Failed.");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool App::InitForTest(ID3D12GraphicsCommandList6* pCmd)
+{
+    auto pDevice = asdx::GetD3D12Device();
+
+    struct Vertex
+    {
+        asdx::Vector3 Position;
+        asdx::Vector2 TexCoord;
+        asdx::Vector4 Color;
+    };
+
+    {
+        const Vertex vertices[] = {
+            { asdx::Vector3( 0.0f,  0.7f, 1.0f), asdx::Vector2(0.0f, 1.0f), asdx::Vector4(1.0f, 0.0f, 0.0f, 1.0f) },
+            { asdx::Vector3(-0.7f, -0.7f, 1.0f), asdx::Vector2(0.0f, 0.0f), asdx::Vector4(0.0f, 1.0f, 0.0f, 1.0f) },
+            { asdx::Vector3( 0.7f, -0.7f, 1.0f), asdx::Vector2(1.0f, 0.0f), asdx::Vector4(0.0f, 0.0f, 1.0f, 1.0f) },
+        };
+
+        auto size = sizeof(vertices);
+        if (!asdx::CreateUploadBuffer(pDevice, size, m_VB.GetAddress()))
+        {
+            ELOGA("Error : CreateUploadBuffer() Failed.");
+            return false;
+        }
+
+        void* ptr = nullptr;
+        auto hr = m_VB->Map(0, nullptr, &ptr);
+        if (FAILED(hr))
+        {
+            ELOGA("Error : ID3D12Resource::Map() Failed. errcode = 0x%x", hr);
+            return false;
+        }
+
+        memcpy(ptr, vertices, sizeof(vertices));
+        m_VB->Unmap(0, nullptr);
+
+        if (!asdx::CreateBufferSRV(pDevice, m_VB.GetPtr(), sizeof(vertices) / 4, 0, m_VertexSRV.GetAddress()))
+        {
+            ELOGA("Error : CreateBufferSRV() Failed.");
+            return false;
+        }
+    }
+
+    // インデックスデータ生成.
+    {
+        uint32_t indices[] = { 0, 1, 2 };
+
+        if (!asdx::CreateUploadBuffer(pDevice, sizeof(indices), m_IB.GetAddress()))
+        {
+            ELOGA("Error : CreateUploadBuffer() Failed.");
+            return false;
+        }
+
+        void* ptr = nullptr;
+        auto hr = m_IB->Map(0, nullptr, &ptr);
+        if (FAILED(hr))
+        {
+            ELOGA("Error : ID3D12Resource::Map() Failed. errcode = 0x%x", hr);
+            return false;
+        }
+
+        memcpy(ptr, indices, sizeof(indices));
+        m_IB->Unmap(0, nullptr);
+
+        if (!asdx::CreateBufferSRV(pDevice, m_IB.GetPtr(), 3, 0, m_IndexSRV.GetAddress()))
+        {
+            ELOGA("Error : CreateBufferSRV() Failed.");
+            return false;
+        }
+    }
+
+    // 下位レベル高速化機構の生成.
+    {
+        asdx::DXR_GEOMETRY_DESC desc = {};
+        desc.Type                                   = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+        desc.Flags                                  = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+        desc.Triangles.VertexCount                  = 3;
+        desc.Triangles.VertexBuffer.StartAddress    = m_VB->GetGPUVirtualAddress();
+        desc.Triangles.VertexBuffer.StrideInBytes   = sizeof(Vertex);
+        desc.Triangles.VertexFormat                 = DXGI_FORMAT_R32G32B32_FLOAT;
+        desc.Triangles.IndexCount                   = 3;
+        desc.Triangles.IndexBuffer                  = m_IB->GetGPUVirtualAddress();
+        desc.Triangles.IndexFormat                  = DXGI_FORMAT_R32_UINT;
+        desc.Triangles.Transform3x4                 = 0;
+
+        if (!m_BLAS.Init(pDevice, 1, &desc, asdx::DXR_BUILD_FLAG_PREFER_FAST_TRACE))
+        {
+            ELOGA("Error : Blas::Init() Failed.");
+            return false;
+        }
+    }
+
+    // 上位レベル高速化機構の生成.
+    {
+        auto matrix = asdx::Transform3x4();
+
+        asdx::DXR_INSTANCE_DESC desc = {};
+        memcpy(desc.Transform, &matrix, sizeof(matrix));
+        desc.InstanceMask           = 0x1;
+        desc.AccelerationStructure  = m_BLAS.GetResource()->GetGPUVirtualAddress();
+
+        if (!m_TLAS.Init(pDevice, 1, &desc, asdx::DXR_BUILD_FLAG_PREFER_FAST_TRACE))
+        {
+            ELOGA("Error : Tlas::Init() Failed.");
+            return false;
+        }
+    }
+
+    // ビルド.
+    {
+        m_BLAS.Build(pCmd);
+        m_TLAS.Build(pCmd);
+    }
+
+    return true;
 }
 #endif//RTC_TARGET == RTC_DEVELOP
 

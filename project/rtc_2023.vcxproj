@@ -105,7 +105,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\asdx12\include;$(ProjectDir)..\external\asdx12\external\imgui;$(ProjectDir)..\external\asdx12\external\flatbuffers-2.0.0\include;$(ProjectDir)..\external\fpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\asdx12\include;$(ProjectDir)..\external\asdx12\external\imgui;$(ProjectDir)..\external\asdx12\external\flatbuffers-2.0.0\include;$(ProjectDir)..\external\dxc\include;$(ProjectDir)..\external\fpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -118,6 +118,10 @@
       <VariableName>%(Filename)</VariableName>
       <HeaderFileOutput>$(ProjectDir)..\res\shaders\Compiled\%(Filename).inc</HeaderFileOutput>
     </FxCompile>
+    <PreBuildEvent>
+      <Command>xcopy $(ProjectDir)..\external\dxc\bin\x64\dxcompiler.dll $(TargetDir) /E /Y
+xcopy $(ProjectDir)..\external\dxc\bin\x64\dxil.dll $(TargetDir) /E /Y</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -127,7 +131,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\asdx12\include;$(ProjectDir)..\external\asdx12\external\imgui;$(ProjectDir)..\external\asdx12\external\flatbuffers-2.0.0\include;$(ProjectDir)..\external\fpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\asdx12\include;$(ProjectDir)..\external\asdx12\external\imgui;$(ProjectDir)..\external\asdx12\external\flatbuffers-2.0.0\include;$(ProjectDir)..\external\dxc\include;$(ProjectDir)..\external\fpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -142,6 +146,10 @@
       <VariableName>%(Filename)</VariableName>
       <HeaderFileOutput>$(ProjectDir)..\res\shaders\Compiled\%(Filename).inc</HeaderFileOutput>
     </FxCompile>
+    <PreBuildEvent>
+      <Command>xcopy $(ProjectDir)..\external\dxc\bin\x64\dxcompiler.dll $(TargetDir) /E /Y
+xcopy $(ProjectDir)..\external\dxc\bin\x64\dxil.dll $(TargetDir) /E /Y</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ProjectReference Include="..\external\asdx12\project\asdx12.vcxproj">
@@ -156,6 +164,7 @@
   <ItemGroup>
     <ClCompile Include="..\external\fpng\fpng.cpp" />
     <ClCompile Include="..\src\App.cpp" />
+    <ClCompile Include="..\src\DebugRender.cpp" />
     <ClCompile Include="..\src\main.cpp" />
     <ClCompile Include="..\src\Render.cpp" />
   </ItemGroup>
@@ -165,6 +174,12 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="..\res\shaders\DebugPS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
     <FxCompile Include="..\res\shaders\ModelPS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
@@ -187,13 +202,11 @@
     </FxCompile>
     <FxCompile Include="..\res\shaders\TonemapCS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4.0</ShaderModel>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compute</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">4.0</ShaderModel>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compute</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">4.0</ShaderModel>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4.0</ShaderModel>
     </FxCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -24,7 +24,6 @@
 
 #if RTC_TARGET == RTC_DEVELOP
 #include <fw/asdxAppCamera.h>
-#include <edit/asdxFileWatcher.h>
 #endif
 
 #define EXPORT_COUNT    (2)
@@ -58,11 +57,7 @@ struct ExportImage
 ///////////////////////////////////////////////////////////////////////////////
 // App class
 ///////////////////////////////////////////////////////////////////////////////
-class App 
-    : public asdx::Application
-#if RTC_TARGET == RTC_DEVELOP
-    , public asdx::IFileUpdateListener
-#endif
+class App : public asdx::Application
 {
 public:
     App(const RenderDesc& desc);
@@ -82,13 +77,15 @@ private:
             size_t                  binarySize);
 
         void Term();
+
+        void DispatchRays(ID3D12GraphicsCommandList6* pCmd, uint32_t w, uint32_t h);
     };
 
     RenderDesc                      m_RenderDesc;
     asdx::WaitPoint                 m_WaitPoint;
     asdx::ConstantBuffer            m_SceneParam;
 
-    asdx::ComputeTarget             m_Canvas;
+    asdx::ComputeTarget             m_Radiance;
     asdx::ColorTarget               m_Albedo;
     asdx::ColorTarget               m_Normal;
     asdx::ColorTarget               m_Velocity;
@@ -98,7 +95,6 @@ private:
     asdx::ComputeTarget             m_ColorHistory[2];
     asdx::ComputeTarget             m_Capture[EXPORT_COUNT];
     asdx::RefPtr<ID3D12Resource>    m_ReadBackTexture[EXPORT_COUNT];
-    uint32_t                        m_ReadBackPitch;
 
     uint8_t                         m_CurrHistoryIndex = 0;
     uint8_t                         m_PrevHistoryIndex = 1;
@@ -106,14 +102,14 @@ private:
     asdx::PipelineState             m_GBufferPipelineState;
     asdx::PipelineState             m_TonemapPipelineState;
     asdx::PipelineState             m_DenoisePipelineState;
-    asdx::PipelineState             m_TemporalAAPipelineState;
-    RayTracingPipeline              m_PathTracePipeline;
+    asdx::PipelineState             m_TemporalAntiAliasPipelineState;
+    RayTracingPipeline              m_RayTracingPipeline;
 
     asdx::RefPtr<ID3D12RootSignature>   m_GBufferRootSig;
     asdx::RefPtr<ID3D12RootSignature>   m_TonemapRootSig;
     asdx::RefPtr<ID3D12RootSignature>   m_RayTracingRootSig;
 
-
+    uint32_t        m_ReadBackPitch     = 0;
     uint64_t        m_AppFrameCount     = 0;
     uint32_t        m_CaptureIndex      = 0;
     uint8_t         m_ExportIndex       = 0;
@@ -132,6 +128,16 @@ private:
     asdx::Matrix    m_PrevInvProj;
     asdx::Vector3   m_CameraDir;
 
+#if 1 // For Test.
+    asdx::RefPtr<ID3D12Resource>    m_VB;
+    asdx::RefPtr<ID3D12Resource>    m_IB;
+    asdx::RefPtr<asdx::IShaderResourceView> m_VertexSRV;
+    asdx::RefPtr<asdx::IShaderResourceView> m_IndexSRV;
+    asdx::Blas                              m_BLAS;
+    asdx::Tlas                              m_TLAS;
+    bool InitForTest(ID3D12GraphicsCommandList6* pCmd);
+#endif
+
 #if RTC_TARGET == RTC_DEVELOP
     //+++++++++++++++++++
     //      開発用.
@@ -139,16 +145,18 @@ private:
     asdx::BitFlags8                 m_RayTracingReloadFlags;
     asdx::BitFlags8                 m_GBufferReloadFlags;
     asdx::BitFlags8                 m_TonemapReloadFlags;
-    RayTracingPipeline              m_DebugTracePipeline;
-    asdx::FileWatcher               m_Watcher;
+    RayTracingPipeline              m_DevRayTracingPipeline;
     asdx::AppCamera                 m_AppCamera;
+    bool                            m_DirtyShader;
+
+    bool                                 m_OpenDebugSetting;
+    int                                  m_DebugTextureType;
+    asdx::RefPtr<ID3D12RootSignature>    m_DebugRootSignature;
+    asdx::PipelineState                  m_DebugPipelineState;
 
     void Draw2D(ID3D12GraphicsCommandList6* pCmd);
     void ReloadShader();
-    void OnUpdate(
-        asdx::ACTION_TYPE type,
-        const char* directoryPath,
-        const char* relativePath) override;
+    bool InitDebugPass();
 #endif
 
     bool OnInit() override;
@@ -162,5 +170,10 @@ private:
 
     void Render(ID3D12GraphicsCommandList6* pCmdList);
     void CaptureResource(ID3D12Resource* pResource);
-    RayTracingPipeline* GetRayTracingPipline();
+    void DispatchRay(ID3D12GraphicsCommandList6* pCmdList);
+
+    bool InitGBufferPass();
+    bool InitRayTracingPass();
+    bool InitTonemapPass();
+    bool InitTemporalAntiAliasPass();
 };
