@@ -133,15 +133,15 @@ RayDesc GeneratePinholeCameraRay(float2 offset)
 {
     float2 pixel = float2(DispatchRaysIndex().xy);
     const float2 resolution = float2(DispatchRaysDimensions().xy);
-    //pixel += lerp(-0.5f.xx, 0.5f.xx, offset);
+    pixel += lerp(-0.5f.xx, 0.5f.xx, offset);
 
     float2 uv = (pixel + 0.5f) / resolution;
     uv.y = 1.0f - uv.y;
-    pixel = uv * 2.0f - 1.0f;
+    float2 clipPos = uv * 2.0f - 1.0f;
 
     RayDesc ray;
     ray.Origin      = GetPosition(SceneParam.View);
-    ray.Direction   = CalcRayDir(pixel, SceneParam.View, SceneParam.Proj);
+    ray.Direction   = CalcRayDir(clipPos, SceneParam.View, SceneParam.Proj);
     ray.TMin        = 0.1f;
     ray.TMax        = FLT_MAX;
 
@@ -203,23 +203,10 @@ void OnGenerateRay()
 {
     // 乱数初期化.
     uint4 seed = SetSeed(DispatchRaysIndex().xy, SceneParam.FrameIndex);
-
-    // アンチエイリアシング.
     float2 offset = float2(Random(seed), Random(seed));
-    //pixel += lerp(-0.5f.xx, 0.5f.xx, offset);
 
     // レイを設定.
     RayDesc ray = GeneratePinholeCameraRay(offset);
-
-    //float2 index = float2(DispatchRaysIndex().xy) / float2(DispatchRaysDimensions().xy);
-    //float3 rayPos, rayDir;
-    //CalcRay(index, rayPos, rayDir);
-
-    //RayDesc ray;
-    //ray.Origin = rayPos;
-    //ray.Direction = rayDir;
-    //ray.TMin = 1e-3f;
-    //ray.TMax = 10000.0f;
 
     // パストレ.
     //#if RTC_TARGET == RTC_DEBUG

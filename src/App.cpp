@@ -122,6 +122,9 @@ unsigned ExportRenderedImage(void* args)
     return 0;
 }
 
+//-----------------------------------------------------------------------------
+//      SRVとしてディスクリプタレンジを初期化します.
+//-----------------------------------------------------------------------------
 void InitRangeAsSRV(D3D12_DESCRIPTOR_RANGE& range, UINT registerIndex, UINT count = 1)
 {
     range.RangeType                         = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -131,6 +134,9 @@ void InitRangeAsSRV(D3D12_DESCRIPTOR_RANGE& range, UINT registerIndex, UINT coun
     range.OffsetInDescriptorsFromTableStart = 0;
 }
 
+//-----------------------------------------------------------------------------
+//      UAVとしてディスクリプタレンジを初期化します.
+//-----------------------------------------------------------------------------
 void InitRangeAsUAV(D3D12_DESCRIPTOR_RANGE& range, UINT registerIndex, UINT count = 1)
 {
     range.RangeType                         = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
@@ -140,6 +146,9 @@ void InitRangeAsUAV(D3D12_DESCRIPTOR_RANGE& range, UINT registerIndex, UINT coun
     range.OffsetInDescriptorsFromTableStart = 0;
 }
 
+//-----------------------------------------------------------------------------
+//      ルート定数として初期化します.
+//-----------------------------------------------------------------------------
 void InitAsConstants(D3D12_ROOT_PARAMETER& param, UINT registerIndex, UINT count, D3D12_SHADER_VISIBILITY visiblity)
 {
     param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
@@ -149,6 +158,9 @@ void InitAsConstants(D3D12_ROOT_PARAMETER& param, UINT registerIndex, UINT count
     param.ShaderVisibility          = visiblity;
 }
 
+//-----------------------------------------------------------------------------
+//      定数バッファとして初期化します.
+//-----------------------------------------------------------------------------
 void InitAsCBV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VISIBILITY visiblity)
 {
     param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -157,6 +169,9 @@ void InitAsCBV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VIS
     param.ShaderVisibility          = visiblity;
 }
 
+//-----------------------------------------------------------------------------
+//      シェーダリソースビューとして初期化します.
+//-----------------------------------------------------------------------------
 void InitAsSRV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VISIBILITY visiblity)
 {
     param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_SRV;
@@ -165,6 +180,9 @@ void InitAsSRV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VIS
     param.ShaderVisibility          = visiblity;
 }
 
+//-----------------------------------------------------------------------------
+//      ディスクリプタテーブルとして初期化します.
+//-----------------------------------------------------------------------------
 void InitAsTable(
     D3D12_ROOT_PARAMETER&           param,
     UINT                            count,
@@ -178,6 +196,9 @@ void InitAsTable(
     param.ShaderVisibility                      = visiblity;
 }
 
+//-----------------------------------------------------------------------------
+//      ルートシグニチャを初期化します.
+//-----------------------------------------------------------------------------
 bool InitRootSignature
 (
     ID3D12Device*                       pDevice,
@@ -1459,10 +1480,10 @@ void App::ReloadShader()
     if (m_TonemapReloadFlags.Get(REQUEST_BIT_INDEX))
     {
         //asdx::RefPtr<asdx::IBlob> shader;
-        //if (CompileShader(L"../res/shaders/Tonemap.hlsl", "main", "ps_6_6", shader.GetAddress()))
+        //if (CompileShader(L"../res/shaders/TonemapCS.hlsl", "main", "cs_6_6", shader.GetAddress()))
         //{
         //    m_TonemapPipelineState.ReplaceShader(
-        //        asdx::SHADER_TYPE_PS,
+        //        asdx::SHADER_TYPE_CS,
         //        shader->GetBufferPointer(),
         //        shader->GetBufferSize());
         //    m_TonemapPipelineState.Rebuild();
@@ -1492,6 +1513,9 @@ void App::ReloadShader()
     }
 }
 
+//-----------------------------------------------------------------------------
+//      デバッグパスを初期化します.
+//-----------------------------------------------------------------------------
 bool App::InitDebugPass()
 {
     auto pDevice = asdx::GetD3D12Device();

@@ -67,6 +67,7 @@ void App::Draw2D(ID3D12GraphicsCommandList6* pCmd)
 {
     const asdx::IShaderResourceView* pDebugSRV = m_Radiance.GetSRV();
     uint32_t samplingType = SAMPLING_TYPE_RGBA;
+
     switch(m_DebugTextureType)
     {
     case DEBUG_TEXTURE_RENDERED:
@@ -125,10 +126,6 @@ void App::Draw2D(ID3D12GraphicsCommandList6* pCmd)
             ImGui::Text(u8"FPS   : %.3lf", GetFPS());
             ImGui::Text(u8"Frame : %ld", GetFrameCount());
             ImGui::Text(u8"Accum : %ld", m_AccumulatedFrames);
-            if (m_DirtyShader)
-            {
-                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), u8"Shader Reloaded!!");
-            }
         }
         ImGui::End();
 
