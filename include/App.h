@@ -88,6 +88,7 @@ private:
     asdx::ComputeTarget             m_Radiance;
     asdx::ColorTarget               m_Albedo;
     asdx::ColorTarget               m_Normal;
+    asdx::ColorTarget               m_Roughness;
     asdx::ColorTarget               m_Velocity;
     asdx::DepthTarget               m_Depth;
     asdx::ComputeTarget             m_Denoised;
@@ -102,11 +103,11 @@ private:
     asdx::PipelineState             m_GBufferPipelineState;
     asdx::PipelineState             m_TonemapPipelineState;
     asdx::PipelineState             m_DenoisePipelineState;
-    asdx::PipelineState             m_TemporalAntiAliasPipelineState;
+    asdx::PipelineState             m_TaaPipelineState;
     RayTracingPipeline              m_RayTracingPipeline;
 
     asdx::RefPtr<ID3D12RootSignature>   m_GBufferRootSig;
-    asdx::RefPtr<ID3D12RootSignature>   m_TonemapRootSig;
+    asdx::RefPtr<ID3D12RootSignature>   m_PostProcessRootSig;
     asdx::RefPtr<ID3D12RootSignature>   m_RayTracingRootSig;
 
     uint32_t        m_ReadBackPitch     = 0;

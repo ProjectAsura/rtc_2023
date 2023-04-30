@@ -36,6 +36,7 @@ static const uint32_t   MAX_ITERATION       = 16;
 #include "../res/shaders/Compiled/PathTracing.inc"
 #include "../res/shaders/Compiled/ModelVS.inc"
 #include "../res/shaders/Compiled/ModelPS.inc"
+#include "../res/shaders/Compiled/TonemapCS.inc"
 #if RTC_TARGET == RTC_DEVELOP
 #include "../asdx12/res/shaders/Compiled/FullScreenVS.inc"
 #include "../res/shaders/Compiled/DebugPS.inc"
@@ -777,6 +778,32 @@ bool App::InitGBufferPass()
         m_Normal.SetName(L"NormalBuffer");
     }
 
+    // ラフネス用ターゲット.
+    {
+        asdx::TargetDesc desc;
+        desc.Dimension          = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        desc.Width              = m_RenderDesc.Width;
+        desc.Height             = m_RenderDesc.Height;
+        desc.DepthOrArraySize   = 1;
+        desc.MipLevels          = 1;
+        desc.Format             = DXGI_FORMAT_R8_UNORM;
+        desc.SampleDesc.Count   = 1;
+        desc.SampleDesc.Quality = 0;
+        desc.InitState          = D3D12_RESOURCE_STATE_COMMON;
+        desc.ClearColor[0]      = 0.0f;
+        desc.ClearColor[1]      = 0.0f;
+        desc.ClearColor[2]      = 0.0f;
+        desc.ClearColor[3]      = 0.0f;
+
+        if (!m_Roughness.Init(&desc))
+        {
+            ELOG("Error : Roughness Init Failed.");
+            return false;
+        }
+
+        m_Roughness.SetName(L"RoughnessBuffer");
+    }
+
     // 速度用ターゲット.
     {
         asdx::TargetDesc desc;
@@ -909,20 +936,48 @@ bool App::InitTonemapPass()
 {
     auto pDevice = asdx::GetD3D12Device();
 
-    // トーンマップルートシグニチャ.
+    // ポストプロセス用ルートシグニチャ.
     {
+        auto cs = D3D12_SHADER_VISIBILITY_ALL;
+
+        D3D12_DESCRIPTOR_RANGE uavRanges[1] = {};
+        InitRangeAsUAV(uavRanges[0], 0);
+
+        D3D12_DESCRIPTOR_RANGE srvRanges[2] = {};
+        InitRangeAsSRV(srvRanges[0], 0);
+        InitRangeAsSRV(srvRanges[1], 1);
+
+        D3D12_ROOT_PARAMETER params[4] = {};
+        InitAsCBV  (params[0], 0, cs);
+        InitAsTable(params[1], 1, &uavRanges[0], cs);
+        InitAsTable(params[2], 1, &srvRanges[0], cs);
+        InitAsTable(params[3], 1, &srvRanges[1], cs);
+
+        D3D12_ROOT_SIGNATURE_DESC desc = {};
+        desc.pParameters        = params;
+        desc.NumParameters      = _countof(params);
+        desc.pStaticSamplers    = asdx::GetStaticSamplers();
+        desc.NumStaticSamplers  = asdx::GetStaticSamplerCounts();
+
+        if (!InitRootSignature(pDevice, &desc, m_PostProcessRootSig.GetAddress()))
+        {
+            ELOG("Error : PostProcessRootSig Init Failed.");
+            return false;
+        }
     }
 
-    //// トーンマップパイプライン.
-    //{
-    //    D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
+    // トーンマップパイプライン.
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
+        desc.pRootSignature = m_PostProcessRootSig.GetPtr();
+        desc.CS             = { TonemapCS, sizeof(TonemapCS) };
 
-    //    if (!m_TonemapPipelineState.Init(pDevice, &desc))
-    //    {
-    //        ELOG("Error : Tonemap Pipeline Init Failed.");
-    //        return false;
-    //    }
-    //}
+        if (!m_TonemapPipelineState.Init(pDevice, &desc))
+        {
+            ELOG("Error : Tonemap Pipeline Init Failed.");
+            return false;
+        }
+    }
 
     // トーンマップ用ターゲット.
     {
@@ -954,10 +1009,6 @@ bool App::InitTonemapPass()
 //-----------------------------------------------------------------------------
 bool App::InitTemporalAntiAliasPass()
 {
-    // ルートシグニチャ.
-    {
-    }
-
     // パイプラインステート.
     {
     }
@@ -1011,6 +1062,7 @@ void App::OnTerm()
     m_Radiance  .Term();
     m_Albedo    .Term();
     m_Normal    .Term();
+    m_Roughness .Term();
     m_Velocity  .Term();
     m_Depth     .Term();
     m_Denoised  .Term();
@@ -1028,16 +1080,20 @@ void App::OnTerm()
     m_GBufferPipelineState.Term();
     m_TonemapPipelineState.Term();
     m_DenoisePipelineState.Term();
-    m_TemporalAntiAliasPipelineState.Term();
+    m_TaaPipelineState    .Term();
+    m_RayTracingPipeline  .Term();
 
-    m_RayTracingRootSig.Reset();
-    m_RayTracingPipeline.Term();
+    m_GBufferRootSig    .Reset();
+    m_PostProcessRootSig.Reset();
+    m_RayTracingRootSig .Reset();
+
     RTC_DEBUG_CODE(m_DevRayTracingPipeline.Term());
     RTC_DEBUG_CODE(m_DebugRootSignature.Reset());
     RTC_DEBUG_CODE(m_DebugPipelineState.Term());
     RTC_DEBUG_CODE(m_RayPoints.Term());
     RTC_DEBUG_CODE(m_DrawArgs.Term());
     RTC_DEBUG_CODE(m_LinePipelineState.Term());
+    RTC_DEBUG_CODE(m_CopyDepthPipelineState.Term());
     RTC_DEBUG_CODE(m_DrawCommandSig.Reset());
 
 #if 1
@@ -1467,6 +1523,7 @@ void App::ReloadShader()
 {
     auto successCount = 0;
 
+    // レイトレーシング.
     if (m_RayTracingReloadFlags.Get(REQUEST_BIT_INDEX))
     {
         asdx::RefPtr<asdx::IBlob> shader;
@@ -1491,17 +1548,19 @@ void App::ReloadShader()
         m_RayTracingReloadFlags.Set(REQUEST_BIT_INDEX, false);
     }
 
+    // トーンマッピング.
     if (m_TonemapReloadFlags.Get(REQUEST_BIT_INDEX))
     {
-        //asdx::RefPtr<asdx::IBlob> shader;
-        //if (CompileShader(L"../res/shaders/TonemapCS.hlsl", "main", "cs_6_6", shader.GetAddress()))
-        //{
-        //    m_TonemapPipelineState.ReplaceShader(
-        //        asdx::SHADER_TYPE_CS,
-        //        shader->GetBufferPointer(),
-        //        shader->GetBufferSize());
-        //    m_TonemapPipelineState.Rebuild();
-        //}
+        asdx::RefPtr<asdx::IBlob> shader;
+        if (CompileShader(L"../res/shaders/TonemapCS.hlsl", "main", "cs_6_6", shader.GetAddress()))
+        {
+            m_TonemapPipelineState.ReplaceShader(
+                asdx::SHADER_TYPE_CS,
+                shader->GetBufferPointer(),
+                shader->GetBufferSize());
+            m_TonemapPipelineState.Rebuild();
+            successCount++;
+        }
 
         m_TonemapReloadFlags.Set(REQUEST_BIT_INDEX, false);
     }

@@ -13,12 +13,27 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="ソース ファイル\external">
+      <UniqueIdentifier>{6349bfe6-5cf3-4914-b19d-7ea698f94107}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\external">
+      <UniqueIdentifier>{2e60aaa1-7bd6-4575-9c90-641c9bf7e719}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\App.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Macro.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\ModelOBJ.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\fpng\fpng.h">
+      <Filter>ヘッダー ファイル\external</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\ModelGLTF.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
@@ -32,10 +47,13 @@
     <ClCompile Include="..\src\Render.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="..\external\fpng\fpng.cpp">
+    <ClCompile Include="..\src\DebugRender.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\DebugRender.cpp">
+    <ClCompile Include="..\external\fpng\fpng.cpp">
+      <Filter>ソース ファイル\external</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\ModelOBJ.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
