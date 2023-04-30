@@ -99,7 +99,7 @@ PSOutput main(const VSOutput input)
     // テクスチャサンプリング.
     float4 albedo = albedoMap.Sample(LinearWrap, input.TexCoord);
     float3 normal = DecodeBC5Normal(normalMap.Sample(LinearWrap, input.TexCoord));
-    float3 orm    = ormMap.Sample(LinearWrap, input.TexCoord);
+    float3 orm    = ormMap.Sample(LinearWrap, input.TexCoord).rgb;
 
     // 接線空間からワールド空間に変換.
     float3 bitangent = normalize(cross(input.Tangent, input.Normal));

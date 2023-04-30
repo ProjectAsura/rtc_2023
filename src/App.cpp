@@ -39,6 +39,9 @@ static const uint32_t   MAX_ITERATION       = 16;
 #if RTC_TARGET == RTC_DEVELOP
 #include "../asdx12/res/shaders/Compiled/FullScreenVS.inc"
 #include "../res/shaders/Compiled/DebugPS.inc"
+#include "../res/shaders/Compiled/LineVS.inc"
+#include "../res/shaders/Compiled/LinePS.inc"
+#include "../res/shaders/Compiled/CopyDepthPS.inc"
 #endif
 
 
@@ -1032,6 +1035,10 @@ void App::OnTerm()
     RTC_DEBUG_CODE(m_DevRayTracingPipeline.Term());
     RTC_DEBUG_CODE(m_DebugRootSignature.Reset());
     RTC_DEBUG_CODE(m_DebugPipelineState.Term());
+    RTC_DEBUG_CODE(m_RayPoints.Term());
+    RTC_DEBUG_CODE(m_DrawArgs.Term());
+    RTC_DEBUG_CODE(m_LinePipelineState.Term());
+    RTC_DEBUG_CODE(m_DrawCommandSig.Reset());
 
 #if 1
     m_VB.Reset();
@@ -1166,12 +1173,19 @@ void App::OnFrameRender(asdx::FrameEventArgs& args)
             m_ColorTarget[idx].GetRTV()->GetHandleCPU()
         };
 
-        pCmd->OMSetRenderTargets(_countof(rtvs), rtvs, FALSE, nullptr);
+        auto dsv = m_DepthTarget.GetDSV()->GetHandleCPU();
+
+        pCmd->OMSetRenderTargets(_countof(rtvs), rtvs, FALSE, &dsv);
         pCmd->ClearRenderTargetView(rtvs[0], m_ClearColor, 0, nullptr);
+        pCmd->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
         pCmd->RSSetViewports(1, &m_Viewport);
         pCmd->RSSetScissorRects(1, &m_ScissorRect);
 
-
+        // 深度コピー.
+        pCmd->SetGraphicsRootSignature(m_DebugRootSignature.GetPtr());
+        m_CopyDepthPipelineState.SetState(pCmd);
+        pCmd->SetGraphicsRootDescriptorTable(1, m_Depth.GetSRV()->GetHandleGPU());
+        asdx::DrawQuad(pCmd);
 
         Draw2D(pCmd);
 
@@ -1523,13 +1537,15 @@ bool App::InitDebugPass()
     // ルートシグニチャ.
     {
         auto ps = D3D12_SHADER_VISIBILITY_PIXEL;
+        auto vs_ps = D3D12_SHADER_VISIBILITY_ALL;
 
         D3D12_DESCRIPTOR_RANGE srvRange[1] = {};
         InitRangeAsSRV(srvRange[0], 0);
 
-        D3D12_ROOT_PARAMETER params[2] = {};
+        D3D12_ROOT_PARAMETER params[3] = {};
         InitAsConstants(params[0], 0, 1, ps);
-        InitAsTable(params[1], 1, &srvRange[0], ps);
+        InitAsTable(params[1], 1, &srvRange[0], vs_ps);
+        InitAsCBV(params[2], 1, vs_ps);
 
         auto flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
@@ -1554,7 +1570,7 @@ bool App::InitDebugPass()
         desc.VS                     = { FullScreenVS, sizeof(FullScreenVS) };
         desc.PS                     = { DebugPS, sizeof(DebugPS) };
         desc.BlendState             = asdx::BLEND_DESC(asdx::BLEND_STATE_OPAQUE);
-        desc.DepthStencilState      = asdx::DEPTH_STENCIL_DESC(asdx::DEPTH_STATE_DEFAULT);
+        desc.DepthStencilState      = asdx::DEPTH_STENCIL_DESC(asdx::DEPTH_STATE_NONE);
         desc.RasterizerState        = asdx::RASTERIZER_DESC(asdx::RASTERIZER_STATE_CULL_NONE);
         desc.SampleMask             = D3D12_DEFAULT_SAMPLE_MASK;
         desc.PrimitiveTopologyType  = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
@@ -1564,10 +1580,104 @@ bool App::InitDebugPass()
         desc.InputLayout            = asdx::GetQuadLayout();
         desc.SampleDesc.Count       = 1;
         desc.SampleDesc.Quality     = 0;
-
+            
         if (!m_DebugPipelineState.Init(pDevice, &desc))
         {
             ELOG("Error : DebugPipelineState Init Failed.");
+            return false;
+        }
+    }
+
+    // レイバッファ.
+    {
+        auto size = sizeof(asdx::Vector4) * (MAX_ITERATION + 1);
+
+        if (!m_RayPoints.Init(size, D3D12_RESOURCE_STATE_COMMON))
+        {
+            ELOG("Error : Ray Point Init Failed.");
+            return false;
+        }       
+    }
+
+    // 描画引数バッファ.
+    {
+        uint32_t stride = sizeof(D3D12_DRAW_ARGUMENTS);
+
+        if (!m_DrawArgs.Init(1, stride, D3D12_RESOURCE_STATE_COMMON))
+        {
+            ELOG("Error : Draw Args Init Failed.");
+            return false;
+        }
+    }
+
+    // ライン描画用パイプラインステート.
+    {
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+        desc.pRootSignature         = m_DebugRootSignature.GetPtr();
+        desc.VS                     = { LineVS, sizeof(LineVS) };
+        desc.PS                     = { LinePS, sizeof(LinePS) };
+        desc.BlendState             = asdx::BLEND_DESC(asdx::BLEND_STATE_OPAQUE);
+        desc.DepthStencilState      = asdx::DEPTH_STENCIL_DESC(asdx::DEPTH_STATE_READ_ONLY);
+        desc.RasterizerState        = asdx::RASTERIZER_DESC(asdx::RASTERIZER_STATE_CULL_NONE);
+        desc.SampleMask             = D3D12_DEFAULT_SAMPLE_MASK;
+        desc.PrimitiveTopologyType  = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+        desc.NumRenderTargets       = 1;
+        desc.RTVFormats[0]          = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.DSVFormat              = DXGI_FORMAT_D32_FLOAT;
+        desc.InputLayout            = asdx::GetQuadLayout();
+        desc.SampleDesc.Count       = 1;
+        desc.SampleDesc.Quality     = 0;
+
+        if (!m_LinePipelineState.Init(pDevice, &desc))
+        {
+            ELOG("Error : Line Pipeline Init Failed.");
+            return false;
+        }
+    }
+
+    // コマンドシグニチャ
+    {
+        D3D12_INDIRECT_ARGUMENT_DESC argDesc = {};
+        argDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+
+        D3D12_COMMAND_SIGNATURE_DESC desc = {};
+        desc.ByteStride         = sizeof(D3D12_DRAW_ARGUMENTS);
+        desc.NumArgumentDescs   = 1;
+        desc.pArgumentDescs     = &argDesc;
+        desc.NodeMask           = 0;
+
+        auto hr = pDevice->CreateCommandSignature(&desc, nullptr, IID_PPV_ARGS(m_DrawCommandSig.ReleaseAndGetAddress()));
+        if (FAILED(hr))
+        {
+            ELOG("Error : DrawCommandSig Init Failed.");
+            return false;
+        }
+    }
+
+    // 深度コピー用パイプラインステート
+    {
+        auto blendState = asdx::BLEND_DESC(asdx::BLEND_STATE_OPAQUE);
+        blendState.RenderTarget[0].RenderTargetWriteMask = 0;
+
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+        desc.pRootSignature         = m_DebugRootSignature.GetPtr();
+        desc.VS                     = { FullScreenVS, sizeof(FullScreenVS) };
+        desc.PS                     = { CopyDepthPS, sizeof(CopyDepthPS) };
+        desc.BlendState             = blendState;
+        desc.DepthStencilState      = asdx::DEPTH_STENCIL_DESC(asdx::DEPTH_STATE_READ_ONLY);
+        desc.RasterizerState        = asdx::RASTERIZER_DESC(asdx::RASTERIZER_STATE_CULL_NONE);
+        desc.SampleMask             = D3D12_DEFAULT_SAMPLE_MASK;
+        desc.PrimitiveTopologyType  = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        desc.NumRenderTargets       = 1;
+        desc.RTVFormats[0]          = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.DSVFormat              = DXGI_FORMAT_D32_FLOAT;
+        desc.InputLayout            = asdx::GetQuadLayout();
+        desc.SampleDesc.Count       = 1;
+        desc.SampleDesc.Quality     = 0;
+
+        if (!m_CopyDepthPipelineState.Init(pDevice, &desc))
+        {
+            ELOG("Error : CopyDepth Pipeline Init Failed.");
             return false;
         }
     }

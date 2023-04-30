@@ -21,9 +21,6 @@
     <ClInclude Include="..\include\Macro.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="..\external\fpng\fpng.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\App.cpp">
@@ -65,6 +62,15 @@
       <Filter>リソース ファイル</Filter>
     </FxCompile>
     <FxCompile Include="..\res\shaders\DebugPS.hlsl">
+      <Filter>リソース ファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="..\res\shaders\LineVS.hlsl">
+      <Filter>リソース ファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="..\res\shaders\LinePS.hlsl">
+      <Filter>リソース ファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="..\res\shaders\CopyDepthPS.hlsl">
       <Filter>リソース ファイル</Filter>
     </FxCompile>
   </ItemGroup>

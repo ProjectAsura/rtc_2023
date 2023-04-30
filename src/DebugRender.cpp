@@ -58,8 +58,6 @@ static const char* kDebugTextureItems[] = {
 
 } // namespace
 
-
-
 //-----------------------------------------------------------------------------
 //      デバッグ用2D描画を行います.
 //-----------------------------------------------------------------------------
@@ -116,6 +114,9 @@ void App::Draw2D(ID3D12GraphicsCommandList6* pCmd)
         asdx::DrawQuad(pCmd);
     }
 
+    // レイを描画
+    DrawRay(pCmd);
+
     #if ASDX_ENABLE_IMGUI
     asdx::GuiMgr::Instance().Update(m_Width, m_Height);
     {
@@ -166,5 +167,19 @@ void App::Draw2D(ID3D12GraphicsCommandList6* pCmd)
     }
     asdx::GuiMgr::Instance().Draw(pCmd);
     #endif//ASDX_ENABLE_IMGUI
+}
+
+
+//-----------------------------------------------------------------------------
+//      レイをデバッグ描画します.
+//-----------------------------------------------------------------------------
+void App::DrawRay(ID3D12GraphicsCommandList6* pCmd)
+{
+    pCmd->SetGraphicsRootSignature(m_DebugRootSignature.GetPtr());
+    m_LinePipelineState.SetState(pCmd);
+    pCmd->SetGraphicsRootDescriptorTable(1, m_RayPoints.GetView()->GetHandleGPU());
+    pCmd->SetGraphicsRootConstantBufferView(2, m_SceneParam.GetResource()->GetGPUVirtualAddress());
+    pCmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINESTRIP);
+    pCmd->ExecuteIndirect(m_DrawCommandSig.GetPtr(), 1, m_DrawArgs.GetResource(), 0, nullptr, 0);
 }
 #endif//RTC_TARGET == RTC_DEVELOP

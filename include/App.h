@@ -148,15 +148,21 @@ private:
     RayTracingPipeline              m_DevRayTracingPipeline;
     asdx::AppCamera                 m_AppCamera;
     bool                            m_DirtyShader;
+    asdx::ByteAddressBuffer         m_RayPoints;
+    asdx::StructuredBuffer          m_DrawArgs;
 
     bool                                 m_OpenDebugSetting;
     int                                  m_DebugTextureType;
     asdx::RefPtr<ID3D12RootSignature>    m_DebugRootSignature;
     asdx::PipelineState                  m_DebugPipelineState;
+    asdx::PipelineState                  m_LinePipelineState;
+    asdx::PipelineState                  m_CopyDepthPipelineState;
+    asdx::RefPtr<ID3D12CommandSignature> m_DrawCommandSig;
 
     void Draw2D(ID3D12GraphicsCommandList6* pCmd);
     void ReloadShader();
     bool InitDebugPass();
+    void DrawRay(ID3D12GraphicsCommandList6* pCmd);
 #endif
 
     bool OnInit() override;
