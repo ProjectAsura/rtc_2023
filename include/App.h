@@ -54,6 +54,7 @@ struct ExportImage
     ID3D12Resource*         pReadBackTexture;
 };
 
+
 ///////////////////////////////////////////////////////////////////////////////
 // App class
 ///////////////////////////////////////////////////////////////////////////////
@@ -130,12 +131,14 @@ private:
     asdx::Vector3   m_CameraDir;
 
 #if 1 // For Test.
-    asdx::RefPtr<ID3D12Resource>    m_VB;
-    asdx::RefPtr<ID3D12Resource>    m_IB;
+    asdx::RefPtr<ID3D12Resource>            m_VB;
+    asdx::RefPtr<ID3D12Resource>            m_IB;
     asdx::RefPtr<asdx::IShaderResourceView> m_VertexSRV;
     asdx::RefPtr<asdx::IShaderResourceView> m_IndexSRV;
     asdx::Blas                              m_BLAS;
     asdx::Tlas                              m_TLAS;
+    asdx::Texture                           m_IBL;
+
     bool InitForTest(ID3D12GraphicsCommandList6* pCmd);
 #endif
 

@@ -1852,10 +1852,14 @@ bool App::InitForTest(ID3D12GraphicsCommandList6* pCmd)
         }
     }
 
-    // ビルド.
+    // 高速化機構のビルド.
     {
         m_BLAS.Build(pCmd);
         m_TLAS.Build(pCmd);
+    }
+
+    // IBLの読み込み.
+    {
     }
 
     return true;

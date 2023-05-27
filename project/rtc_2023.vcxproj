@@ -160,7 +160,6 @@ xcopy $(ProjectDir)..\external\dxc\bin\x64\dxil.dll $(TargetDir) /E /Y</Command>
     <ClInclude Include="..\external\fpng\fpng.h" />
     <ClInclude Include="..\include\App.h" />
     <ClInclude Include="..\include\Macro.h" />
-    <ClInclude Include="..\include\ModelGLTF.h" />
     <ClInclude Include="..\include\ModelOBJ.h" />
   </ItemGroup>
   <ItemGroup>
