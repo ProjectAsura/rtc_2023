@@ -62,6 +62,9 @@
     <None Include="..\res\shaders\SceneParameters.hlsli">
       <Filter>リソース ファイル</Filter>
     </None>
+    <None Include="..\res\shaders\ReBlur.hlsli">
+      <Filter>リソース ファイル</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="..\res\shaders\PathTracing.hlsl">

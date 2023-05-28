@@ -172,6 +172,7 @@ xcopy $(ProjectDir)..\external\dxc\bin\x64\dxil.dll $(TargetDir) /E /Y</Command>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\res\shaders\Common.hlsli" />
+    <None Include="..\res\shaders\ReBlur.hlsli" />
     <None Include="..\res\shaders\SceneParameters.hlsli" />
     <None Include="packages.config" />
   </ItemGroup>
