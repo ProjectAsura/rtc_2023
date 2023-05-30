@@ -41,6 +41,10 @@ void App::Render(ID3D12GraphicsCommandList6* pCmd)
         pCmd->SetComputeRootShaderResourceView(3, m_IB->GetGPUVirtualAddress());
 //        pCmd->SetComputeRootDescriptorTable(4, );
         pCmd->SetComputeRootDescriptorTable(5, m_Radiance.GetUAV()->GetHandleGPU());
+    #if RTC_TARGET == RTC_DEVELOP
+        pCmd->SetComputeRootDescriptorTable(6, m_DrawArgs.GetView()->GetHandleGPU());
+        pCmd->SetComputeRootDescriptorTable(7, m_RayPoints.GetView()->GetHandleGPU());
+    #endif
 
         DispatchRay(pCmd);
 

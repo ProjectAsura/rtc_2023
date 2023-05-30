@@ -31,6 +31,9 @@ struct SceneParameters
     float   AnimationTime;      // アニメーション時間[sec].
     bool    EnableAccumulation; // アキュームレーション有効フラグ.
     uint    AccumulatedFrames;  // アキュームレーション済みフレーム数.
+
+    int2    DebugRayIndex;      // デバッグレイ番号.
+    int2    Reserved0;
 };
 
 #endif//SCENE_PARAMETERS_HLSLI

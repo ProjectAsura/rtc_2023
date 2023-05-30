@@ -151,12 +151,25 @@ private:
     asdx::BitFlags8                 m_TonemapReloadFlags;
     RayTracingPipeline              m_DevRayTracingPipeline;
     asdx::AppCamera                 m_AppCamera;
-    bool                            m_DirtyShader;
+    bool                            m_DirtyShader   = false;
+    bool                            m_FreezeCamera  = false;
     asdx::ByteAddressBuffer         m_RayPoints;
     asdx::StructuredBuffer          m_DrawArgs;
 
-    bool                                 m_OpenDebugSetting;
-    int                                  m_DebugTextureType;
+    asdx::Matrix        m_FreezeCurrView;
+    asdx::Matrix        m_FreezeCurrProj;
+    asdx::Matrix        m_FreezeCurrInvView;
+    asdx::Matrix        m_FreezeCurrInvProj;
+    asdx::Matrix        m_FreezePrevView;
+    asdx::Matrix        m_FreezePrevProj;
+    asdx::Matrix        m_FreezePrevInvView;
+    asdx::Matrix        m_FreezePrevInvProj;
+    asdx::Vector3       m_FreezeCameraDir;
+    int                 m_DebugRayIndexOfX = -1;
+    int                 m_DebugRayIndexOfY = -1;
+
+    bool                                 m_OpenDebugSetting = true;
+    int                                  m_DebugTextureType = 0;
     asdx::RefPtr<ID3D12RootSignature>    m_DebugRootSignature;
     asdx::PipelineState                  m_DebugPipelineState;
     asdx::PipelineState                  m_LinePipelineState;

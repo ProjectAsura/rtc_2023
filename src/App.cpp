@@ -71,6 +71,10 @@ struct SceneParams
     float           AnimationTimeSec;
     uint32_t        EnableAccumulation;
     uint32_t        AccumulatedFrames;
+
+    int32_t         DebugRayIndexOfX;
+    int32_t         DebugRayIndexOfY;
+    uint32_t        Reserved[2];
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -124,112 +128,6 @@ unsigned ExportRenderedImage(void* args)
     image->pReadBackTexture->Unmap(0, nullptr);
 
     return 0;
-}
-
-//-----------------------------------------------------------------------------
-//      SRVとしてディスクリプタレンジを初期化します.
-//-----------------------------------------------------------------------------
-void InitRangeAsSRV(D3D12_DESCRIPTOR_RANGE& range, UINT registerIndex, UINT count = 1)
-{
-    range.RangeType                         = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    range.NumDescriptors                    = count;
-    range.BaseShaderRegister                = registerIndex;
-    range.RegisterSpace                     = 0;
-    range.OffsetInDescriptorsFromTableStart = 0;
-}
-
-//-----------------------------------------------------------------------------
-//      UAVとしてディスクリプタレンジを初期化します.
-//-----------------------------------------------------------------------------
-void InitRangeAsUAV(D3D12_DESCRIPTOR_RANGE& range, UINT registerIndex, UINT count = 1)
-{
-    range.RangeType                         = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-    range.NumDescriptors                    = count;
-    range.BaseShaderRegister                = registerIndex;
-    range.RegisterSpace                     = 0;
-    range.OffsetInDescriptorsFromTableStart = 0;
-}
-
-//-----------------------------------------------------------------------------
-//      ルート定数として初期化します.
-//-----------------------------------------------------------------------------
-void InitAsConstants(D3D12_ROOT_PARAMETER& param, UINT registerIndex, UINT count, D3D12_SHADER_VISIBILITY visiblity)
-{
-    param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    param.Constants.Num32BitValues  = count;
-    param.Constants.ShaderRegister  = registerIndex;
-    param.Constants.RegisterSpace   = 0;
-    param.ShaderVisibility          = visiblity;
-}
-
-//-----------------------------------------------------------------------------
-//      定数バッファとして初期化します.
-//-----------------------------------------------------------------------------
-void InitAsCBV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VISIBILITY visiblity)
-{
-    param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    param.Descriptor.ShaderRegister = registerIndex;
-    param.Descriptor.RegisterSpace  = 0;
-    param.ShaderVisibility          = visiblity;
-}
-
-//-----------------------------------------------------------------------------
-//      シェーダリソースビューとして初期化します.
-//-----------------------------------------------------------------------------
-void InitAsSRV(D3D12_ROOT_PARAMETER& param, UINT registerIndex, D3D12_SHADER_VISIBILITY visiblity)
-{
-    param.ParameterType             = D3D12_ROOT_PARAMETER_TYPE_SRV;
-    param.Descriptor.ShaderRegister = registerIndex;
-    param.Descriptor.RegisterSpace  = 0;
-    param.ShaderVisibility          = visiblity;
-}
-
-//-----------------------------------------------------------------------------
-//      ディスクリプタテーブルとして初期化します.
-//-----------------------------------------------------------------------------
-void InitAsTable(
-    D3D12_ROOT_PARAMETER&           param,
-    UINT                            count,
-    const D3D12_DESCRIPTOR_RANGE*   range,
-    D3D12_SHADER_VISIBILITY         visiblity
-)
-{
-    param.ParameterType                         = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    param.DescriptorTable.NumDescriptorRanges   = 1;
-    param.DescriptorTable.pDescriptorRanges     = range;
-    param.ShaderVisibility                      = visiblity;
-}
-
-//-----------------------------------------------------------------------------
-//      ルートシグニチャを初期化します.
-//-----------------------------------------------------------------------------
-bool InitRootSignature
-(
-    ID3D12Device*                       pDevice,
-    const D3D12_ROOT_SIGNATURE_DESC*    pDesc,
-    ID3D12RootSignature**               ppRootSig
-)
-{
-    asdx::RefPtr<ID3DBlob> blob;
-    asdx::RefPtr<ID3DBlob> errorBlob;
-    auto hr = D3D12SerializeRootSignature(
-        pDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, blob.GetAddress(), errorBlob.GetAddress());
-    if (FAILED(hr))
-    {
-        ELOGA("Error : D3D12SerializeRootSignature() Failed. errcode = 0x%x, msg = %s",
-            hr, reinterpret_cast<const char*>(errorBlob->GetBufferPointer()));
-        return false;
-    }
-
-    hr = pDevice->CreateRootSignature(
-        0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(ppRootSig));
-    if (FAILED(hr))
-    {
-        ELOG("Error : ID3D12Device::CreateRootSignature() Failed. errcode = 0x%x", hr);
-        return false;
-    }
-
-    return true;
 }
 
 } // namespace
@@ -376,7 +274,7 @@ void App::RayTracingPipeline::DispatchRays(ID3D12GraphicsCommandList6* pCmd, uin
 //      コンストラクタです.
 //-----------------------------------------------------------------------------
 App::App(const RenderDesc& desc)
-: asdx::Application(L"rtc_2023", desc.Width, desc.Height, nullptr, nullptr, nullptr)
+: asdx::Application(L"rtc alpha 0.0", desc.Width, desc.Height, nullptr, nullptr, nullptr)
 , m_RenderDesc(desc)
 {
 #if RTC_TARGET == RTC_DEVELOP
@@ -667,19 +565,19 @@ bool App::InitGBufferPass()
         auto ps = D3D12_SHADER_VISIBILITY_PIXEL;
 
         D3D12_DESCRIPTOR_RANGE ranges[5] = {};
-        InitRangeAsSRV(ranges[0], 0);
-        InitRangeAsSRV(ranges[1], 1);
-        InitRangeAsSRV(ranges[2], 0);
-        InitRangeAsSRV(ranges[3], 1);
-        InitRangeAsSRV(ranges[4], 2);
+        asdx::InitRangeAsSRV(ranges[0], 0);
+        asdx::InitRangeAsSRV(ranges[1], 1);
+        asdx::InitRangeAsSRV(ranges[2], 0);
+        asdx::InitRangeAsSRV(ranges[3], 1);
+        asdx::InitRangeAsSRV(ranges[4], 2);
 
         D3D12_ROOT_PARAMETER params[6] = {};
-        InitAsCBV(params[0], 0, vs);                    // SceneParams.
-        InitAsTable(params[1], 1, &ranges[0], vs);      // Transforms.
-        InitAsTable(params[2], 1, &ranges[1], vs);      // Vertices.
-        InitAsTable(params[3], 1, &ranges[2], ps);      // Albedo.
-        InitAsTable(params[4], 1, &ranges[3], ps);      // Normal.
-        InitAsTable(params[5], 1, &ranges[4], ps);      // Roughness.
+        asdx::InitAsCBV(params[0], 0, vs);                    // SceneParams.
+        asdx::InitAsTable(params[1], 1, &ranges[0], vs);      // Transforms.
+        asdx::InitAsTable(params[2], 1, &ranges[1], vs);      // Vertices.
+        asdx::InitAsTable(params[3], 1, &ranges[2], ps);      // Albedo.
+        asdx::InitAsTable(params[4], 1, &ranges[3], ps);      // Normal.
+        asdx::InitAsTable(params[5], 1, &ranges[4], ps);      // Roughness.
 
         auto flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
         flags |= D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
@@ -690,7 +588,7 @@ bool App::InitGBufferPass()
         desc.NumStaticSamplers  = asdx::GetStaticSamplerCounts();
         desc.pStaticSamplers    = asdx::GetStaticSamplers();
 
-        if (!InitRootSignature(pDevice, &desc, m_GBufferRootSig.GetAddress()))
+        if (!asdx::InitRootSignature(pDevice, &desc, m_GBufferRootSig.GetAddress()))
         {
             ELOG("Error : GBuffer RootSignature Init Failed.");
             return false;
@@ -869,18 +767,22 @@ bool App::InitRayTracingPass()
         D3D12_SHADER_VISIBILITY cs = D3D12_SHADER_VISIBILITY_ALL;
 
         D3D12_DESCRIPTOR_RANGE srvRange[1] = {};
-        InitRangeAsSRV(srvRange[0], 5);
+        asdx::InitRangeAsSRV(srvRange[0], 5);
 
-        D3D12_DESCRIPTOR_RANGE uavRange[1] = {};
-        InitRangeAsUAV(uavRange[0], 0);
+        D3D12_DESCRIPTOR_RANGE uavRange[3] = {};
+        asdx::InitRangeAsUAV(uavRange[0], 0);
+        asdx::InitRangeAsUAV(uavRange[1], 1);
+        asdx::InitRangeAsUAV(uavRange[2], 2);
 
-        D3D12_ROOT_PARAMETER params[6] = {};
-        InitAsCBV  (params[0], 0, cs);
-        InitAsSRV  (params[1], 0, cs);
-        InitAsSRV  (params[2], 1, cs);
-        InitAsSRV  (params[3], 2, cs);
-        InitAsTable(params[4], 1, &srvRange[0], cs);
-        InitAsTable(params[5], 1, &uavRange[0], cs);
+        D3D12_ROOT_PARAMETER params[8] = {};
+        asdx::InitAsCBV  (params[0], 0, cs);
+        asdx::InitAsSRV  (params[1], 0, cs);
+        asdx::InitAsSRV  (params[2], 1, cs);
+        asdx::InitAsSRV  (params[3], 2, cs);
+        asdx::InitAsTable(params[4], 1, &srvRange[0], cs);
+        asdx::InitAsTable(params[5], 1, &uavRange[0], cs);
+        asdx::InitAsTable(params[6], 1, &uavRange[1], cs);
+        asdx::InitAsTable(params[7], 1, &uavRange[2], cs);
 
         D3D12_ROOT_SIGNATURE_DESC desc = {};
         desc.NumParameters       = _countof(params);
@@ -888,7 +790,7 @@ bool App::InitRayTracingPass()
         desc.NumStaticSamplers   = asdx::GetStaticSamplerCounts();
         desc.pStaticSamplers     = asdx::GetStaticSamplers();
 
-        if (!InitRootSignature(pDevice, &desc, m_RayTracingRootSig.GetAddress()))
+        if (!asdx::InitRootSignature(pDevice, &desc, m_RayTracingRootSig.GetAddress()))
         {
             ELOG("Error : RayTracing RootSignature Init Failed.");
             return false;
@@ -941,17 +843,17 @@ bool App::InitTonemapPass()
         auto cs = D3D12_SHADER_VISIBILITY_ALL;
 
         D3D12_DESCRIPTOR_RANGE uavRanges[1] = {};
-        InitRangeAsUAV(uavRanges[0], 0);
+        asdx::InitRangeAsUAV(uavRanges[0], 0);
 
         D3D12_DESCRIPTOR_RANGE srvRanges[2] = {};
-        InitRangeAsSRV(srvRanges[0], 0);
-        InitRangeAsSRV(srvRanges[1], 1);
+        asdx::InitRangeAsSRV(srvRanges[0], 0);
+        asdx::InitRangeAsSRV(srvRanges[1], 1);
 
         D3D12_ROOT_PARAMETER params[4] = {};
-        InitAsCBV  (params[0], 0, cs);
-        InitAsTable(params[1], 1, &uavRanges[0], cs);
-        InitAsTable(params[2], 1, &srvRanges[0], cs);
-        InitAsTable(params[3], 1, &srvRanges[1], cs);
+        asdx::InitAsCBV  (params[0], 0, cs);
+        asdx::InitAsTable(params[1], 1, &uavRanges[0], cs);
+        asdx::InitAsTable(params[2], 1, &srvRanges[0], cs);
+        asdx::InitAsTable(params[3], 1, &srvRanges[1], cs);
 
         D3D12_ROOT_SIGNATURE_DESC desc = {};
         desc.pParameters        = params;
@@ -959,7 +861,7 @@ bool App::InitTonemapPass()
         desc.pStaticSamplers    = asdx::GetStaticSamplers();
         desc.NumStaticSamplers  = asdx::GetStaticSamplerCounts();
 
-        if (!InitRootSignature(pDevice, &desc, m_PostProcessRootSig.GetAddress()))
+        if (!asdx::InitRootSignature(pDevice, &desc, m_PostProcessRootSig.GetAddress()))
         {
             ELOG("Error : PostProcessRootSig Init Failed.");
             return false;
@@ -1158,11 +1060,28 @@ void App::OnFrameMove(asdx::FrameEventArgs& args)
         auto changed = false;
         changed |= (memcmp(&m_CurrView, &m_PrevView, sizeof(asdx::Matrix)) != 0);
         changed |= (memcmp(&m_CurrProj, &m_PrevProj, sizeof(asdx::Matrix)) != 0);
+
     #if RTC_TARGET == RTC_DEVELOP
         if (m_DirtyShader)
         {
             changed       = true;
             m_DirtyShader = false;
+        }
+
+        // カメラフリーズされていないときは更新.
+        if (!m_FreezeCamera)
+        {
+            m_FreezeCurrView    = m_CurrView;
+            m_FreezeCurrProj    = m_CurrProj;
+            m_FreezeCurrInvView = m_CurrInvView;
+            m_FreezeCurrInvProj = m_CurrInvProj;
+
+            m_FreezePrevView    = m_PrevView;
+            m_FreezePrevProj    = m_PrevProj;
+            m_FreezePrevInvView = m_PrevInvView;
+            m_FreezePrevInvProj = m_PrevInvProj;
+
+            m_FreezeCameraDir = m_CameraDir;
         }
     #endif
 
@@ -1195,6 +1114,30 @@ void App::OnFrameMove(asdx::FrameEventArgs& args)
         params.MaxIteration         = MAX_ITERATION;
         params.EnableAccumulation   = (enableAccumulation) ? 1 : 0;
         params.AccumulatedFrames    = m_AccumulatedFrames;
+        params.DebugRayIndexOfX     = -1;
+        params.DebugRayIndexOfY     = -1;
+
+    #if RTC_TARGET == RTC_DEVELOP
+        // レイデバッグ番号を設定.
+        params.DebugRayIndexOfX     = m_DebugRayIndexOfX;
+        params.DebugRayIndexOfY     = m_DebugRayIndexOfY;
+
+        // カメラフリーズの場合は上書き.
+        if (m_FreezeCamera)
+        {
+            params.View             = m_FreezeCurrView;
+            params.Proj             = m_FreezeCurrProj;
+            params.InvView          = m_FreezeCurrInvView;
+            params.InvProj          = m_FreezeCurrInvProj;
+            params.InvViewProj      = m_FreezeCurrInvProj * m_FreezeCurrInvProj;
+            params.PrevView         = m_FreezePrevView;
+            params.PrevProj         = m_FreezePrevProj;
+            params.PrevInvView      = m_FreezePrevInvView;
+            params.PrevInvProj      = m_FreezePrevInvProj;
+            params.PrevInvViewProj  = m_FreezePrevInvProj * m_FreezePrevInvView;
+            params.CameraDir        = m_FreezeCameraDir;
+        }
+    #endif
 
         m_SceneParam.SwapBuffer();
         m_SceneParam.Update(&params, sizeof(params));
@@ -1599,12 +1542,12 @@ bool App::InitDebugPass()
         auto vs_ps = D3D12_SHADER_VISIBILITY_ALL;
 
         D3D12_DESCRIPTOR_RANGE srvRange[1] = {};
-        InitRangeAsSRV(srvRange[0], 0);
+        asdx::InitRangeAsSRV(srvRange[0], 0);
 
         D3D12_ROOT_PARAMETER params[3] = {};
-        InitAsConstants(params[0], 0, 1, ps);
-        InitAsTable(params[1], 1, &srvRange[0], vs_ps);
-        InitAsCBV(params[2], 1, vs_ps);
+        asdx::InitAsConstants(params[0], 0, 1, ps);
+        asdx::InitAsTable(params[1], 1, &srvRange[0], vs_ps);
+        asdx::InitAsCBV(params[2], 1, vs_ps);
 
         auto flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
@@ -1615,7 +1558,7 @@ bool App::InitDebugPass()
         desc.NumStaticSamplers  = asdx::GetStaticSamplerCounts();
         desc.Flags              = flags;
 
-        if (!InitRootSignature(pDevice, &desc, m_DebugRootSignature.GetAddress()))
+        if (!asdx::InitRootSignature(pDevice, &desc, m_DebugRootSignature.GetAddress()))
         {
             ELOG("Error : DebugRootSignature Init Failed.");
             return false;

@@ -137,11 +137,37 @@ void App::Draw2D(ID3D12GraphicsCommandList6* pCmd)
             int count = _countof(kDebugTextureItems);
             ImGui::Combo(u8"バッファ", &m_DebugTextureType, kDebugTextureItems, count);
 
-            auto pos = m_AppCamera.GetPosition();
-            auto at  = m_AppCamera.GetTarget();
-            auto up  = m_AppCamera.GetUpward();
+            // フリーズカメラ.
+            // レイトレーシングに用いるカメラ更新をデバッグの為に停止します.
+            if (!m_FreezeCamera) 
+            {
+                if (ImGui::Button(u8"Freeze Camera"))
+                { m_FreezeCamera = true; }
+            }
+            else
+            {
+                if (ImGui::Button(u8"Unfreeze Camera"))
+                { m_FreezeCamera = false; }
+            }
+
+            if (ImGui::CollapsingHeader(u8"レイデバッグ"))
+            {
+                int index[2] = { m_DebugRayIndexOfX, m_DebugRayIndexOfY };
+                int mini = -1;
+                int maxi = asdx::Max<int>(int(m_Width), int(m_Height));
+                if (ImGui::DragInt2(u8"レイ番号", index, 1.0f, mini, maxi))
+                {
+                    m_DebugRayIndexOfX = index[0];
+                    m_DebugRayIndexOfY = index[1];
+                }
+            }
+
             if (ImGui::CollapsingHeader(u8"カメラ情報"))
             {
+                auto pos = m_AppCamera.GetPosition();
+                auto at  = m_AppCamera.GetTarget();
+                auto up  = m_AppCamera.GetUpward();
+
                 ImGui::Text(u8"位置   : %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
                 ImGui::Text(u8"注視点 : %.2f, %.2f, %.2f", at.x, at.y, at.z);
                 ImGui::Text(u8"上向き : %.2f, %.2f, %.2f", up.x, up.y, up.z);

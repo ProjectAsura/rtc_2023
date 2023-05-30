@@ -34,6 +34,11 @@ RayTracingAS                    SceneAS    : register(t0);
 //Texture2D                       BackGround : register(t3);
 RWTexture2D<float4>             Radiance   : register(u0);
 
+#if RTC_TARGET == RTC_DEBUG
+RWStructuredBuffer<uint4>   DrawArgs   : register(u1);
+RWByteAddressBuffer         RayPoints  : register(u2);
+#endif//RTC_TARGET == RTC_DEBUG
+
 ByteAddressBuffer   Vertices : register(t1);
 ByteAddressBuffer   Indices  : register(t2);
 
@@ -41,7 +46,7 @@ ByteAddressBuffer   Indices  : register(t2);
 // Forward Declarations.
 //-----------------------------------------------------------------------------
 float3 PathTracing (RayDesc ray);
-float3 DebugTracing(RayDesc ray);
+float3 DebugTracing(RayDesc ray, bool debugRay);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -167,7 +172,6 @@ void CalcRay(float2 index, out float3 pos, out float3 dir)
     dir = normalize(screen.xyz - orig.xyz);
 }
 
-
 //-----------------------------------------------------------------------------
 //      シャドウレイをキャストします.
 //-----------------------------------------------------------------------------
@@ -201,28 +205,29 @@ bool CastShadowRay(float3 pos, float3 normal, float3 dir, float tmax)
 [shader("raygeneration")]
 void OnGenerateRay()
 {
+    const uint2 rayId = DispatchRaysIndex().xy;
+
     // 乱数初期化.
-    uint4 seed = SetSeed(DispatchRaysIndex().xy, SceneParam.FrameIndex);
+    uint4 seed = SetSeed(rayId, SceneParam.FrameIndex);
     float2 offset = float2(Random(seed), Random(seed));
 
     // レイを設定.
     RayDesc ray = GeneratePinholeCameraRay(offset);
 
     // パストレ.
-    //#if RTC_TARGET == RTC_DEBUG
-    float3 radiance = DebugTracing(ray);
-    //#else
-    //float3 radiance = PathTracing(ray);
-    //#endif
-
-    uint2 launchId = DispatchRaysIndex().xy;
+    #if RTC_TARGET == RTC_RELEASE
+        float3 radiance = PathTracing(ray);
+    #else
+        const bool debugRay = all(rayId == uint2(SceneParam.DebugRayIndex));
+        float3 radiance = DebugTracing(ray, debugRay);
+    #endif
 
     // アキュムレーション.
-    float3 prevRadiance = Radiance[launchId].rgb;
+    float3 prevRadiance = Radiance[rayId].rgb;
     radiance = (SceneParam.EnableAccumulation) ? (prevRadiance + radiance) : radiance;
 
     // 描画結果を格納.
-    Radiance[launchId] = float4(radiance, 1.0f);
+    Radiance[rayId] = float4(radiance, 1.0f);
 }
 
 //-----------------------------------------------------------------------------
@@ -275,20 +280,35 @@ float3 PathTracing(RayDesc ray)
     float3 W  = 1.0f.xxx;
     float3 Lo = 0.0f.xxx;
 
-
     return SaturateFloat(Lo);
 }
 
 //-----------------------------------------------------------------------------
 //      デバッグトレーシング処理.
 //-----------------------------------------------------------------------------
-float3 DebugTracing(RayDesc ray)
+float3 DebugTracing(RayDesc ray, bool debugRay)
 {
-    Payload payload = (Payload)0;
+    uint vertexCount = debugRay ? 1 : 0;
+    if (debugRay) {
+        RayPoints.Store4(0, asuint(float4(ray.Origin, 0.0f)));
+    }
 
+    Payload payload = (Payload)0;
     TraceRay(SceneAS, RAY_FLAG_NONE, ~0, STANDARD_RAY_INDEX, 0, STANDARD_RAY_INDEX, ray, payload);
 
     float3 color = payload.HasHit() ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 0.0f, 0.0f);
+
+    if (debugRay && payload.HasHit())
+    {
+        // ヒット時に位置座標を記録.
+        //RayPoints.Store4(sizeof(float4) * vertexCount, asuint(float4(hitPos, vertexCount)));
+
+        //// デバッグレイ描画用頂点数をカウントアップ.
+        //vertexCount++;
+
+        //// 描画引数作成.
+        //DrawArgs[0] = uint4(vertexCount, 1, 0, 0);
+    }
 
     return SaturateFloat(color);
 }
