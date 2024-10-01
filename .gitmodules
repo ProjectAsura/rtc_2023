@@ -4,3 +4,6 @@
 [submodule "external/mimalloc"]
 	path = external/mimalloc
 	url = https://github.com/microsoft/mimalloc.git
+[submodule "external/D3D12MemoryAllocator"]
+	path = external/D3D12MemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git

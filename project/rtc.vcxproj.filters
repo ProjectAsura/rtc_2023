@@ -37,6 +37,12 @@
     <Filter Include="ソース ファイル\external\mimalloc">
       <UniqueIdentifier>{af612f43-37fd-4e9b-b55d-2c2fbdec145e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\external\D3D12MemoryAllocator">
+      <UniqueIdentifier>{9fdbc8ec-b545-4ef2-a438-1b75110d55a5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\external\D3D12MemoryAllocator">
+      <UniqueIdentifier>{d48e4fb6-f3ff-4d5b-b877-6b9f694c4ab2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\rtcTypedef.h">
@@ -81,6 +87,9 @@
     <ClInclude Include="..\external\mimalloc\include\mimalloc-override.h">
       <Filter>ヘッダー ファイル\external\mimalloc</Filter>
     </ClInclude>
+    <ClInclude Include="..\external\D3D12MemoryAllocator\include\D3D12MemAlloc.h">
+      <Filter>ヘッダー ファイル\external\D3D12MemoryAllocator</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\main.cpp">
@@ -100,6 +109,9 @@
     </ClCompile>
     <ClCompile Include="..\external\mimalloc\src\static.c">
       <Filter>ソース ファイル\external\mimalloc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\external\D3D12MemoryAllocator\src\D3D12MemAlloc.cpp">
+      <Filter>ソース ファイル\external\D3D12MemoryAllocator</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

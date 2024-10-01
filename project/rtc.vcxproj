@@ -105,7 +105,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\dxc\include;$(ProjectDir)..\external\fpng;$(ProjectDir)..\external\Cflat;$(ProjectDir)..\external\mimalloc\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\dxc\include;$(ProjectDir)..\external\fpng;$(ProjectDir)..\external\Cflat;$(ProjectDir)..\external\mimalloc\include;$(ProjectDir)..\external\D3D12MemoryAllocator\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -131,7 +131,7 @@ xcopy $(ProjectDir)..\external\dxc\bin\x64\dxil.dll $(TargetDir) /E /Y</Command>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\dxc\include;$(ProjectDir)..\external\fpng;$(ProjectDir)..\external\Cflat;$(ProjectDir)..\external\mimalloc\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\external\dxc\include;$(ProjectDir)..\external\fpng;$(ProjectDir)..\external\Cflat;$(ProjectDir)..\external\mimalloc\include;$(ProjectDir)..\external\D3D12MemoryAllocator\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -157,6 +157,7 @@ xcopy $(ProjectDir)..\external\dxc\bin\x64\dxil.dll $(TargetDir) /E /Y</Command>
     <ClInclude Include="..\external\Cflat\CflatGlobal.h" />
     <ClInclude Include="..\external\Cflat\CflatGlobalConfig.h" />
     <ClInclude Include="..\external\Cflat\CflatHelper.h" />
+    <ClInclude Include="..\external\D3D12MemoryAllocator\include\D3D12MemAlloc.h" />
     <ClInclude Include="..\external\fpng\fpng.h" />
     <ClInclude Include="..\external\mimalloc\include\mimalloc-new-delete.h" />
     <ClInclude Include="..\external\mimalloc\include\mimalloc-override.h" />
@@ -172,6 +173,7 @@ xcopy $(ProjectDir)..\external\dxc\bin\x64\dxil.dll $(TargetDir) /E /Y</Command>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <ClCompile Include="..\external\D3D12MemoryAllocator\src\D3D12MemAlloc.cpp" />
     <ClCompile Include="..\external\fpng\fpng.cpp" />
     <ClCompile Include="..\external\mimalloc\src\static.c" />
     <ClCompile Include="..\src\main.cpp" />

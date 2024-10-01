@@ -72,6 +72,22 @@ void LoadPixGpuCpatureDll()
 }
 #endif
 
+//-------------------------------------------------------------------------------------------------
+//      メモリ確保のラッパー関数です.
+//-------------------------------------------------------------------------------------------------
+void* CustomAlloc(size_t size, size_t alignment, void*)
+{ 
+    return mi_malloc_aligned(size, alignment); 
+}
+
+//-------------------------------------------------------------------------------------------------
+//      メモリ解放のラッパー関数です.
+//-------------------------------------------------------------------------------------------------
+void CustomFree(void* ptr, void*)
+{
+    return mi_free(ptr);
+}
+
 //-----------------------------------------------------------------------------
 //      バッファUAVを生成します.
 //-----------------------------------------------------------------------------
@@ -80,16 +96,10 @@ bool CreateBufferUAV
     ID3D12Device*           pDevice,
     UINT64                  bufferSize,
     ID3D12Resource**        ppResource,
+    D3D12MA::Allocation**   ppAllocation,
     D3D12_RESOURCE_STATES   initialResourceState
 )
 {
-    D3D12_HEAP_PROPERTIES props = {};
-    props.Type                  = D3D12_HEAP_TYPE_DEFAULT;
-    props.CPUPageProperty       = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    props.MemoryPoolPreference  = D3D12_MEMORY_POOL_UNKNOWN;
-    props.CreationNodeMask      = 1;
-    props.VisibleNodeMask       = 1;
-
     D3D12_RESOURCE_DESC desc = {};
     desc.Dimension          = D3D12_RESOURCE_DIMENSION_BUFFER;
     desc.Alignment          = 0;
@@ -103,13 +113,17 @@ bool CreateBufferUAV
     desc.Layout             = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     desc.Flags              = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-    auto hr = pDevice->CreateCommittedResource(
-        &props,
-        D3D12_HEAP_FLAG_NONE,
+    D3D12MA::ALLOCATION_DESC allocDesc = {};
+    allocDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+
+    auto hr = rtc::Device::Instance()->GetAllocator()->CreateResource(
+        &allocDesc,
         &desc,
         initialResourceState,
         nullptr,
+        ppAllocation,
         IID_PPV_ARGS(ppResource));
+
     if (FAILED(hr))
     {
         RTC_ELOG("Error : ID3D12Device::CreateCommittedResource() Failed. errcode = 0x%x", hr);
@@ -126,7 +140,8 @@ bool CreateUploadBuffer
 (
     ID3D12Device*           pDevice,
     UINT64                  bufferSize,
-    ID3D12Resource**        ppResource
+    ID3D12Resource**        ppResource,
+    D3D12MA::Allocation**   ppAllocation
 )
 {
     D3D12_HEAP_PROPERTIES props = {};
@@ -149,12 +164,15 @@ bool CreateUploadBuffer
     desc.Layout             = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     desc.Flags              = D3D12_RESOURCE_FLAG_NONE;
 
-    auto hr = pDevice->CreateCommittedResource(
-        &props,
-        D3D12_HEAP_FLAG_NONE,
+    D3D12MA::ALLOCATION_DESC allocDesc = {};
+    allocDesc.HeapType = D3D12_HEAP_TYPE_UPLOAD;
+
+    auto hr = rtc::Device::Instance()->GetAllocator()->CreateResource(
+        &allocDesc,
         &desc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
+        ppAllocation,
         IID_PPV_ARGS(ppResource));
     if (FAILED(hr))
     {
@@ -353,6 +371,25 @@ bool Device::OnInit(const DeviceDesc& deviceDesc)
     #endif
     }
 
+    // アロケータ生成.
+    {
+        D3D12MA::ALLOCATION_CALLBACKS allocationCallbacks = {};
+        allocationCallbacks.pAllocate   = &CustomAlloc;
+        allocationCallbacks.pFree       = &CustomFree;
+ 
+        D3D12MA::ALLOCATOR_DESC allocatorDesc = {};
+        allocatorDesc.pDevice               = m_pDevice.Get();
+        allocatorDesc.pAdapter              = m_pAdapter.Get();
+        allocatorDesc.pAllocationCallbacks  = &allocationCallbacks;
+
+        auto hr = D3D12MA::CreateAllocator(&allocatorDesc, &m_pAllocator);
+        if ( FAILED(hr) )
+        {
+            RTC_ELOG("Error : D3D12MA::CreateAllocator() Failed. errcode = 0x%x", hr);
+            return false;
+        }
+    }
+
     // DXRのサポートチェック.
     {
         D3D12_FEATURE_DATA_D3D12_OPTIONS5 options = {};
@@ -489,6 +526,12 @@ void Device::OnTerm()
             delete m_pDescriptorHeap[i];
             m_pDescriptorHeap[i] = nullptr;
         }
+    }
+
+    if (m_pAllocator)
+    {
+        m_pAllocator->Release();
+        m_pAllocator = nullptr;
     }
 
     m_pDevice .Reset();
@@ -1169,6 +1212,7 @@ bool Blas::Init(ID3D12Device6* pDevice, const Desc& desc)
         pDevice,
         prebuildInfo.ResultDataMaxSizeInBytes,
         m_Structure.GetAddressOf(),
+        m_StructureAllocation.GetAddressOf(),
         D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE))
     {
         RTC_ELOG("Error : CreateUAVBuffer() Failed.");
@@ -1192,6 +1236,7 @@ void Blas::Term()
 {
     m_GeometryDesc.clear();
     m_Structure.Reset();
+    m_StructureAllocation.Reset();
     m_ScratchBufferSize = 0;
 }
 
@@ -1269,7 +1314,8 @@ bool Tlas::Init(ID3D12Device6* pDevice, const Desc& desc)
     if (!CreateUploadBuffer(
         pDevice,
         sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * desc.Instances.size(), 
-        m_Instances.GetAddressOf()))
+        m_Instances.GetAddressOf(),
+        m_InstanceAllocation.GetAddressOf()))
     {
         RTC_ELOG("Error : CreateUploadBuffer() Failed.");
         return false;
@@ -1312,6 +1358,7 @@ bool Tlas::Init(ID3D12Device6* pDevice, const Desc& desc)
         pDevice,
         prebuildInfo.ResultDataMaxSizeInBytes,
         m_Structure.GetAddressOf(),
+        m_StructureAllocation.GetAddressOf(),
         D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE))
     {
         RTC_ELOG("Error : CreateUAVBuffer() Failed.");
@@ -1335,6 +1382,9 @@ void Tlas::Term()
 {
     m_Instances.Reset();
     m_Structure.Reset();
+
+    m_InstanceAllocation .Reset();
+    m_StructureAllocation.Reset();
     m_ScratchBufferSize = 0;
 }
 

@@ -14,10 +14,11 @@
 #include <vector>
 #include <mutex>
 #include <string>
+#include <wrl/client.h>
 #include <Windows.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
-#include <wrl/client.h>
+#include <D3D12MemAlloc.h>
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -98,6 +99,8 @@ public:
     void SetDescriptorHeaps(ID3D12GraphicsCommandList* pCommandList);
     void WaitIdle();
 
+    D3D12MA::Allocator* GetAllocator() const { return m_pAllocator; }
+
 private:
     static Device* s_pInstance;
 
@@ -110,6 +113,8 @@ private:
     CommandQueue*           m_pComputeQueue         = nullptr;
     CommandQueue*           m_pCopyQueue            = nullptr;
     DescriptorHeap*         m_pDescriptorHeap[4]    = {};
+
+    D3D12MA::Allocator*     m_pAllocator            = nullptr;
 
     Device () = default;
     ~Device() = default;
@@ -259,6 +264,7 @@ public:
 
 private:
     RefPtr<ID3D12Resource>                              m_Structure;
+    RefPtr<D3D12MA::Allocation>                         m_StructureAllocation;
     std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>         m_GeometryDesc;
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC  m_BuildDesc         = {};
     size_t                                              m_ScratchBufferSize = 0;
@@ -289,6 +295,8 @@ public:
 private:
     RefPtr<ID3D12Resource>                              m_Structure;
     RefPtr<ID3D12Resource>                              m_Instances;
+    RefPtr<D3D12MA::Allocation>                         m_StructureAllocation;
+    RefPtr<D3D12MA::Allocation>                         m_InstanceAllocation;
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC  m_BuildDesc         = {};
     size_t                                              m_ScratchBufferSize = 0;
 };
