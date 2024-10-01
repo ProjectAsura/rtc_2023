@@ -1,4 +1,4 @@
-﻿// fpng.h - unlicense (see end of fpng.cpp)
+// fpng.h - unlicense (see end of fpng.cpp)
 #pragma once
 
 #include <stdlib.h>

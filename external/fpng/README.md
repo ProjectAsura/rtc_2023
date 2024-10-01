@@ -1,5 +1,5 @@
-﻿# fpng
-fpng is a very fast C++ .PNG image reader/writer for 24/32bpp images. It's a [single source file](src/fpng.h) with no dependencies on any other library. fpng.cpp was written to see just how fast you can write .PNG's without sacrificing too much compression. The files written by fpng conform to the [PNG standard](https://www.w3.org/TR/PNG/), are readable using any PNG decoder, and load or validate successfully using libpng, wuffs, lodepng, stb_image, and [pngcheck](http://www.libpng.org/pub/png/apps/pngcheck.html). PNG files written using fpng can also be read using fpng significantly faster than other PNG libraries, due to its explicit use of [Length-Limited Prefix Codes](https://create.stephan-brumme.com/length-limited-prefix-codes/) and an [optimized decoder](https://fastcompression.blogspot.com/2015/10/huffman-revisited-part-4-multi-bytes.html) that exploits the properties of these codes.
+# fpng
+fpng is a very fast C++ .PNG image reader/writer for 24/32bpp images. It's a [single source file](src/fpng.h) with no dependencies on any other library. fpng.cpp was written to see just how fast you can write .PNG's without sacrificing too much compression. The files written by fpng conform to the [PNG standard](https://www.w3.org/TR/PNG/), are readable using any PNG decoder, and load or validate successfully using libpng, wuffs, lodepng, stb_image, and [pngcheck](http://www.libpng.org/pub/png/apps/pngcheck.html). PNG files written using fpng can also be read using fpng faster than other PNG libraries, due to its explicit use of [Length-Limited Prefix Codes](https://create.stephan-brumme.com/length-limited-prefix-codes/) and an [optimized decoder](https://fastcompression.blogspot.com/2015/10/huffman-revisited-part-4-multi-bytes.html) that exploits the properties of these codes.
 
 fpng.cpp compression compared to stb_image_write.h: 12-19x faster with roughly 5-11% avg. smaller files. 
 
@@ -60,7 +60,7 @@ To build, compile from the included .SLN with Visual Studio 2019/2022 or use cma
 
 Remove "-DSSE=1" on non-x86/x64 systems. The test executable will be in the "bin" or "bin_osx" subdirectory.
 
-Tested with MSVC 2022/2019/gcc 7.5.0/clang 6.0. I have only tested fpng.cpp on little endian systems. The code is there for big endian, and it should work, but it needs testing.
+Tested with MSVC 2022/2019/gcc 7.5.0/clang 6.0 and 10.0. I have only tested fpng.cpp on little endian systems. The code is there for big endian, and it should work, but it needs testing.
 
 ## Testing
 
@@ -141,7 +141,19 @@ They are [here](https://github.com/qrmt/fpng-python). Thanks [Oskar!](https://gi
 
 ## Notes
 
-This version of FPNG always uses PNG filter #2 and is limited to only RLE matches (i.e. LZ matches with a match distance of either 3 or 4). It's around 5% weaker than the original release, which used LZRW1 parsing. (I'll eventually add back in the original parser as an option, but doing that will add more code/complexity to the project.)
+- 4/20/2023: I upgraded lodepng, stb_image, and qoi to the latest versions. I also added pvpngreader.cpp/.h for benchmarking, which uses miniz internally for decompression. The relative encoding/decoding performance of QOI vs. PNG in general seems quite dependent on the C/C++ compiler you use. 
+
+pvpngreader.cpp relies on miniz.h for zlib decompression. It's been fuzzed using zzuf and is used in the [Basis Universal repo](https://github.com/binomialLLC/basis_universal) for PNG reading.
+
+lodepng v20230410 fetched 4/20/2023
+
+stb_image.h v2.28 fetched 4/20/2023
+
+stb_image_write.h v1.16 fetched 12/18/2021 (still latest as of 4/20/2023)
+
+qoi.h fetched 4/20/2023
+
+- This version of FPNG always uses PNG filter #2 and is limited to only RLE matches (i.e. LZ matches with a match distance of either 3 or 4). It's around 5% weaker than the original release, which used LZRW1 parsing. (I'll eventually add back in the original parser as an option, but doing that will add more code/complexity to the project.)
 
 Importantly, the fpng decoder can explictly/purposely only decode PNG files written by fpng, otherwise it returns fpng::FPNG_DECODE_NOT_FPNG (so you can fall back to a general purpose PNG decoder).
 
@@ -150,12 +162,6 @@ fpng's compressor places a special private ancillary chunk in its output files, 
 In single pass mode (the default), fpng uses a set of precomputed Deflate dynamic Huffman tables. Here's [how to use the fpng_test tool to compute custom tables](https://github.com/richgel999/fpng/wiki/How-to-train-new-Huffman-tables-for-custom-content). 
 
 Earlier versions of fpng (before 1.0.5) wrote valid PNG's that wuffs wouldn't accept. As far as I can tell this is a [bug in wuffs](https://github.com/google/wuffs/issues/66). I've added a workaround to fpng's encoder and re-trained its single pass Huffman tables, and I've also added the wuffs decoder to the png_test app.
-
-lodepng v20210627 fetched 12/18/2021
-
-stb_image_write.h v1.16 fetched 12/18/2021
-
-qoi.h fetched 12/18/2021
 
 ## Low-level description
 

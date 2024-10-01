@@ -19,77 +19,90 @@
     <Filter Include="ヘッダー ファイル\external">
       <UniqueIdentifier>{2e60aaa1-7bd6-4575-9c90-641c9bf7e719}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\external\fpng">
+      <UniqueIdentifier>{8364e26c-b523-4545-8f5b-82998747efae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\external\Cflat">
+      <UniqueIdentifier>{79de9aba-530b-4512-a268-88bdfc4121c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\external\fpng">
+      <UniqueIdentifier>{448a820e-8f25-4f97-9ed4-344f56d918ed}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\external\Cflat">
+      <UniqueIdentifier>{585e5ee4-f14f-477c-8c73-88b217db83b1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\external\mimalloc">
+      <UniqueIdentifier>{a4e9dc99-10d5-4a73-aa33-e9af83d0420c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\external\mimalloc">
+      <UniqueIdentifier>{af612f43-37fd-4e9b-b55d-2c2fbdec145e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\App.h">
+    <ClInclude Include="..\include\rtcTypedef.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\Macro.h">
+    <ClInclude Include="..\include\rtcApp.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\ModelOBJ.h">
+    <ClInclude Include="..\include\rtcDevice.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\rtcTimer.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\rtcLog.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="..\external\fpng\fpng.h">
-      <Filter>ヘッダー ファイル\external</Filter>
+      <Filter>ヘッダー ファイル\external\fpng</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\Cflat\Cflat.h">
+      <Filter>ヘッダー ファイル\external\Cflat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\Cflat\CflatConfig.h">
+      <Filter>ヘッダー ファイル\external\Cflat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\Cflat\CflatGlobal.h">
+      <Filter>ヘッダー ファイル\external\Cflat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\Cflat\CflatGlobalConfig.h">
+      <Filter>ヘッダー ファイル\external\Cflat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\Cflat\CflatHelper.h">
+      <Filter>ヘッダー ファイル\external\Cflat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\mimalloc\include\mimalloc.h">
+      <Filter>ヘッダー ファイル\external\mimalloc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\mimalloc\include\mimalloc-new-delete.h">
+      <Filter>ヘッダー ファイル\external\mimalloc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\external\mimalloc\include\mimalloc-override.h">
+      <Filter>ヘッダー ファイル\external\mimalloc</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\App.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\main.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\Render.cpp">
+    <ClCompile Include="..\src\rtcApp.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\DebugRender.cpp">
+    <ClCompile Include="..\src\rtcDevice.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="..\external\fpng\fpng.cpp">
-      <Filter>ソース ファイル\external</Filter>
+      <Filter>ソース ファイル\external\fpng</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\ModelOBJ.cpp">
-      <Filter>ソース ファイル</Filter>
+    <ClCompile Include="..\external\Cflat\Cflat.cpp">
+      <Filter>ソース ファイル\external\Cflat</Filter>
+    </ClCompile>
+    <ClCompile Include="..\external\mimalloc\src\static.c">
+      <Filter>ソース ファイル\external\mimalloc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\res\shaders\Common.hlsli">
-      <Filter>リソース ファイル</Filter>
-    </None>
     <None Include="packages.config" />
-    <None Include="..\res\shaders\SceneParameters.hlsli">
-      <Filter>リソース ファイル</Filter>
-    </None>
-    <None Include="..\res\shaders\ReBlur.hlsli">
-      <Filter>リソース ファイル</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <FxCompile Include="..\res\shaders\PathTracing.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
-    <FxCompile Include="..\res\shaders\TonemapCS.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
-    <FxCompile Include="..\res\shaders\ModelVS.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
-    <FxCompile Include="..\res\shaders\ModelPS.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
-    <FxCompile Include="..\res\shaders\DebugPS.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
-    <FxCompile Include="..\res\shaders\LineVS.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
-    <FxCompile Include="..\res\shaders\LinePS.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
-    <FxCompile Include="..\res\shaders\CopyDepthPS.hlsl">
-      <Filter>リソース ファイル</Filter>
-    </FxCompile>
   </ItemGroup>
 </Project>
