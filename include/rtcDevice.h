@@ -17,12 +17,14 @@
 #include <wrl/client.h>
 #include <Windows.h>
 #include <d3d12.h>
+#include <d3dcompiler.h>
 #include <dxgi1_6.h>
 #include <D3D12MemAlloc.h>
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dxguid.lib")
+#pragma comment(lib, "d3dcompiler.lib")
 
 
 namespace rtc {
@@ -319,6 +321,40 @@ public:
 private:
     RefPtr<ID3D12StateObject>           m_pObject;
     RefPtr<ID3D12StateObjectProperties> m_pProps;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// ComputePipelineState class
+///////////////////////////////////////////////////////////////////////////////
+class ComputePipelineState
+{
+public:
+    ComputePipelineState () = default;
+    ~ComputePipelineState() = default;
+    bool Init(ID3D12Device* pDevice, const D3D12_SHADER_BYTECODE& shader);
+    void Term();
+    void Bind(ID3D12GraphicsCommandList* pCommandList);
+
+private:
+    RefPtr<ID3D12RootSignature> m_pRootSignature;
+    RefPtr<ID3D12PipelineState> m_pPipelineState;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// GraphicsPipelineState class
+///////////////////////////////////////////////////////////////////////////////
+class GraphicsPipelineState
+{
+public:
+    GraphicsPipelineState () = default;
+    ~GraphicsPipelineState() = default;
+    bool Init(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* pDesc);
+    void Term();
+    void Bind(ID3D12GraphicsCommandList* pCommandList);
+
+private:
+    RefPtr<ID3D12RootSignature> m_pRootSignature;
+    RefPtr<ID3D12PipelineState> m_pPipelineState;
 };
 
 } // namespace rtc

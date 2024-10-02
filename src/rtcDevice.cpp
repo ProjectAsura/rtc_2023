@@ -183,6 +183,30 @@ bool CreateUploadBuffer
     return true;
 }
 
+//-----------------------------------------------------------------------------
+//      シェーダからルートシグニチャを生成します.
+//-----------------------------------------------------------------------------
+bool CreateRootSignatureFromShader(ID3D12Device* pDevice, const D3D12_SHADER_BYTECODE& shader, ID3D12RootSignature** ppRootSignature)
+{
+    rtc::RefPtr<ID3DBlob> signature;
+
+    auto hr = D3DGetBlobPart(shader.pShaderBytecode, shader.BytecodeLength, D3D_BLOB_ROOT_SIGNATURE, 0, signature.GetAddressOf());
+    if (FAILED(hr))
+    {
+        RTC_ELOG("Error : D3DGetBlobPart() Failed. errcode = 0x%x", hr);
+        return false;
+    }
+
+    hr = pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(ppRootSignature));
+    if (FAILED(hr))
+    {
+        RTC_ELOG("Error : ID3D12Device::CreateRootSignature() Failed. errcode = 0x%x", hr);
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 
@@ -1568,5 +1592,99 @@ UINT64 RayTracingPipelineState::GetShaderStackSize(const wchar_t* exportName) co
 //-----------------------------------------------------------------------------
 ID3D12StateObject* RayTracingPipelineState::GetStateObject() const
 { return m_pObject.Get(); }
+
+
+///////////////////////////////////////////////////////////////////////////////
+// ComputePipelineState class
+///////////////////////////////////////////////////////////////////////////////
+
+//-----------------------------------------------------------------------------
+//      初期化処理を行います.
+//-----------------------------------------------------------------------------
+bool ComputePipelineState::Init(ID3D12Device* pDevice, const D3D12_SHADER_BYTECODE& shader)
+{
+    // ルートシグニチャ生成.
+    if (!CreateRootSignatureFromShader(pDevice, shader, m_pRootSignature.GetAddressOf()))
+    {
+        return false;
+    }
+
+    // パイプラインステート生成.
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
+        desc.pRootSignature = m_pRootSignature.Get();
+        desc.CS             = shader;
+
+        auto hr = pDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(m_pPipelineState.GetAddressOf()));
+        if (FAILED(hr))
+        {
+            RTC_ELOG("Error : ID3D12Device::CreateComputePipelineState() Failed. errcode = 0x%x", hr);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+//      終了処理を行います.
+//-----------------------------------------------------------------------------
+void ComputePipelineState::Term()
+{
+    m_pPipelineState.Reset();
+    m_pRootSignature.Reset();
+}
+
+//-----------------------------------------------------------------------------
+//      バインドします.
+//-----------------------------------------------------------------------------
+void ComputePipelineState::Bind(ID3D12GraphicsCommandList* pCommandList)
+{
+    pCommandList->SetComputeRootSignature(m_pRootSignature.Get());
+    pCommandList->SetPipelineState(m_pPipelineState.Get());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// GraphicsPipelineState class
+///////////////////////////////////////////////////////////////////////////////
+
+//-----------------------------------------------------------------------------
+//      初期化処理を行います.
+//-----------------------------------------------------------------------------
+bool GraphicsPipelineState::Init(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* pDesc)
+{
+    auto& shader = (pDesc->PS.pShaderBytecode != nullptr) ? pDesc->PS : pDesc->VS;
+    if (!CreateRootSignatureFromShader(pDevice, shader, m_pRootSignature.GetAddressOf()))
+    {
+        return false;
+    }
+
+    auto hr = pDevice->CreateGraphicsPipelineState(pDesc, IID_PPV_ARGS(m_pPipelineState.GetAddressOf()));
+    if (FAILED(hr))
+    {
+        RTC_ELOG("Error : ID3D12Device::CreateGraphicsPipelineState() Failed. errcode = 0x%x", hr);
+        return false;
+    }
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+//      終了処理を行います.
+//-----------------------------------------------------------------------------
+void GraphicsPipelineState::Term()
+{
+    m_pPipelineState.Reset();
+    m_pRootSignature.Reset();
+}
+
+//-----------------------------------------------------------------------------
+//      バインドします.
+//-----------------------------------------------------------------------------
+void GraphicsPipelineState::Bind(ID3D12GraphicsCommandList* pCommandList)
+{
+    pCommandList->SetGraphicsRootSignature(m_pRootSignature.Get());
+    pCommandList->SetPipelineState(m_pPipelineState.Get());
+}
 
 } // namespace rtc
